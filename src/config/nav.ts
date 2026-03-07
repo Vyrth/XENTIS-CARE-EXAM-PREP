@@ -1,0 +1,45 @@
+export const PRIMARY_NAV = [
+  { href: "/dashboard", label: "Dashboard", icon: "layout-dashboard" },
+  { href: "/study-plan", label: "Study Plan", icon: "calendar" },
+  { href: "/questions", label: "Questions", icon: "help-circle" },
+  { href: "/topics", label: "Topic Hub", icon: "book" },
+  { href: "/pre-practice", label: "Pre-Practice Exam", icon: "file-check" },
+  { href: "/practice", label: "Practice Exams", icon: "clipboard-list" },
+  { href: "/flashcards", label: "Flashcards", icon: "layers" },
+  { href: "/videos", label: "Videos", icon: "video" },
+  { href: "/study-guides", label: "Study Guides", icon: "book-open" },
+  { href: "/notebook", label: "Notebook", icon: "notebook" },
+  { href: "/ai-tutor", label: "AI Tutor", icon: "sparkles" },
+  { href: "/high-yield", label: "High-Yield", icon: "layers" },
+  { href: "/progress", label: "Progress", icon: "trending-up" },
+  { href: "/weak-areas", label: "Weak Areas", icon: "trending-up" },
+  { href: "/strength-report", label: "Strength Report", icon: "trending-up" },
+  { href: "/confidence-calibration", label: "Confidence", icon: "bar-chart" },
+  { href: "/billing", label: "Billing", icon: "credit-card" },
+  { href: "/profile", label: "Profile", icon: "user" },
+] as const;
+
+export const ADMIN_NAV = [
+  { href: "/admin", label: "Overview", icon: "layout-dashboard" },
+  { href: "/admin/curriculum", label: "Curriculum", icon: "book" },
+  { href: "/admin/system-bundles", label: "System Bundles", icon: "book" },
+  { href: "/admin/questions", label: "Questions", icon: "help-circle" },
+  { href: "/admin/study-guides", label: "Study Guides", icon: "book-open" },
+  { href: "/admin/flashcards", label: "Flashcards", icon: "layers" },
+  { href: "/admin/videos", label: "Videos", icon: "video" },
+  { href: "/admin/media-rights", label: "Media Rights", icon: "shield" },
+  { href: "/admin/review-queue", label: "Review Queue", icon: "inbox" },
+  { href: "/admin/publish-queue", label: "Publish Queue", icon: "send" },
+  { href: "/admin/ai-prompts", label: "AI Prompts", icon: "cpu" },
+  { href: "/admin/mastery-rules", label: "Mastery Rules", icon: "trending-up" },
+  { href: "/admin/recommendations", label: "Recommendations", icon: "sparkles" },
+  { href: "/admin/issue-reports", label: "Issue Reports", icon: "inbox" },
+  { href: "/admin/analytics", label: "Analytics", icon: "bar-chart" },
+] as const;
+
+export const PUBLIC_NAV = [
+  { href: "/", label: "Home" },
+  { href: "/pricing", label: "Pricing" },
+  { href: "/faq", label: "FAQ" },
+  { href: "/login", label: "Sign in" },
+] as const;
