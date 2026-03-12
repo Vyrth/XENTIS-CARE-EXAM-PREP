@@ -13,6 +13,7 @@ export const WORKFLOW_STATUSES = [
   "approved",
   "published",
   "retired",
+  "needs_revision",
 ] as const;
 
 export type WorkflowStatus = (typeof WORKFLOW_STATUSES)[number];
@@ -26,18 +27,20 @@ export const STATUS_LABELS: Record<WorkflowStatus, string> = {
   approved: "Approved",
   published: "Published",
   retired: "Retired",
+  needs_revision: "Needs Revision",
 };
 
-/** Valid transitions: from -> to[] */
+/** Valid transitions: from -> to[] (includes send-back) */
 export const STATUS_TRANSITIONS: Record<WorkflowStatus, WorkflowStatus[]> = {
   draft: ["editor_review"],
-  editor_review: ["draft", "sme_review"],
-  sme_review: ["editor_review", "legal_review"],
-  legal_review: ["sme_review", "qa_review"],
-  qa_review: ["legal_review", "approved"],
+  editor_review: ["draft", "needs_revision", "sme_review"],
+  sme_review: ["editor_review", "needs_revision", "legal_review"],
+  legal_review: ["sme_review", "needs_revision", "qa_review"],
+  qa_review: ["legal_review", "needs_revision", "approved"],
   approved: ["qa_review", "published"],
   published: ["retired"],
   retired: ["draft"],
+  needs_revision: ["draft", "editor_review"],
 };
 
 export interface ContentSource {
@@ -81,6 +84,8 @@ export interface QuestionAdmin extends Record<string, unknown> {
   systemId: string;
   domainId: string;
   topicId?: string;
+  examTrackId?: string;
+  examTrackSlug?: string;
   status: WorkflowStatus;
   options?: { key: string; text: string; isCorrect?: boolean }[];
   correctAnswer?: string | string[];
@@ -96,6 +101,8 @@ export interface StudyGuideAdmin extends Record<string, unknown> {
   id: string;
   title: string;
   systemId: string;
+  examTrackId?: string;
+  examTrackSlug?: string;
   status: WorkflowStatus;
   sections: { id: string; title: string; content: string; order: number }[];
   sourceIds?: string[];
@@ -118,6 +125,8 @@ export interface VideoAdmin extends Record<string, unknown> {
   id: string;
   title: string;
   systemId: string;
+  examTrackId?: string;
+  examTrackSlug?: string;
   duration: number;
   url: string;
   status: WorkflowStatus;

@@ -1,16 +1,27 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import {
+  isSupabaseConfigured,
+  SUPABASE_ENV,
+  warnIfSupabaseMissing,
+} from "./env";
 
 /**
  * Middleware session refresh. Refreshes Supabase auth and writes cookies to response.
  * Use getUser() for server-side verification (validates JWT).
+ * Fails gracefully when env vars are missing (avoids repeated header errors in dev).
  */
 export async function updateSession(request: NextRequest) {
-  let response = NextResponse.next({ request });
+  const response = NextResponse.next({ request });
+
+  if (!isSupabaseConfigured()) {
+    warnIfSupabaseMissing();
+    return { user: null, response };
+  }
 
   const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    SUPABASE_ENV.url!,
+    SUPABASE_ENV.anonKey!,
     {
       cookies: {
         getAll() {

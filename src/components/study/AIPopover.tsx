@@ -3,6 +3,15 @@
 import { useEffect, useRef } from "react";
 import Link from "next/link";
 
+export type AIPopoverAction =
+  | "explain_simple"
+  | "board_focus"
+  | "deep_dive"
+  | "mnemonic"
+  | "compare"
+  | "flashcards"
+  | "summarize";
+
 type AIPopoverProps = {
   isOpen: boolean;
   selectedText: string;
@@ -10,8 +19,14 @@ type AIPopoverProps = {
   onClose: () => void;
   onExplainSimply?: () => void;
   onBoardTip?: () => void;
+  onDeepDive?: () => void;
   onMnemonic?: () => void;
+  onCompare?: () => void;
+  onFlashcards?: () => void;
+  onSummarize?: () => void;
   onSaveToNotebook?: () => void;
+  /** Show Compare only when we have 2+ concepts from context */
+  showCompare?: boolean;
 };
 
 export function AIPopover({
@@ -21,8 +36,13 @@ export function AIPopover({
   onClose,
   onExplainSimply,
   onBoardTip,
+  onDeepDive,
   onMnemonic,
+  onCompare,
+  onFlashcards,
+  onSummarize,
   onSaveToNotebook,
+  showCompare = false,
 }: AIPopoverProps) {
   const ref = useRef<HTMLDivElement>(null);
 
@@ -43,7 +63,7 @@ export function AIPopover({
   return (
     <div
       ref={ref}
-      className="fixed z-50 w-72 p-3 bg-white dark:bg-slate-800 rounded-xl shadow-lg border border-slate-200 dark:border-slate-700"
+      className="fixed z-50 w-72 max-h-[80vh] overflow-y-auto p-3 bg-white dark:bg-slate-800 rounded-xl shadow-lg border border-slate-200 dark:border-slate-700"
       style={{ left: position.x, top: position.y + 24 }}
     >
       <p className="text-xs text-slate-500 dark:text-slate-400 mb-2 line-clamp-2">
@@ -62,29 +82,51 @@ export function AIPopover({
           onClick={onBoardTip}
           className="text-left px-3 py-2 text-sm rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700"
         >
-          Board tip
+          Board focus
+        </button>
+        <button
+          type="button"
+          onClick={onDeepDive}
+          className="text-left px-3 py-2 text-sm rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700"
+        >
+          Deep dive
         </button>
         <button
           type="button"
           onClick={onMnemonic}
           className="text-left px-3 py-2 text-sm rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700"
         >
-          Make mnemonic
+          Mnemonic
+        </button>
+        {showCompare && (
+          <button
+            type="button"
+            onClick={onCompare}
+            className="text-left px-3 py-2 text-sm rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700"
+          >
+            Compare
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={onFlashcards}
+          className="text-left px-3 py-2 text-sm rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700"
+        >
+          Turn into flashcards
         </button>
         <button
           type="button"
-          disabled
-          className="text-left px-3 py-2 text-sm rounded-lg text-slate-400 dark:text-slate-500 cursor-not-allowed"
-          title="Coming soon"
+          onClick={onSummarize}
+          className="text-left px-3 py-2 text-sm rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700"
         >
-          Save to notebook later
+          Save to notebook
         </button>
       </div>
       <Link
         href="/ai-tutor"
         className="block mt-2 pt-2 border-t border-slate-200 dark:border-slate-700 text-xs text-indigo-600 dark:text-indigo-400 hover:underline"
       >
-        Open AI Tutor
+        Open Jade Tutor
       </Link>
     </div>
   );

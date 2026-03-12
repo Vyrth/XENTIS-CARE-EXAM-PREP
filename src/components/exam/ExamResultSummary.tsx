@@ -3,16 +3,17 @@
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import type { ExamScoreResult } from "@/lib/exam/scoring";
-import { MOCK_SYSTEMS } from "@/data/mock/systems";
 
 export interface ExamResultSummaryProps {
   result: ExamScoreResult;
+  systemNames?: Record<string, string>;
   onViewBreakdown: () => void;
   onReviewAnswers: () => void;
 }
 
 export function ExamResultSummary({
   result,
+  systemNames = {},
   onViewBreakdown,
   onReviewAnswers,
 }: ExamResultSummaryProps) {
@@ -36,6 +37,7 @@ export function ExamResultSummary({
         </p>
         <p className="text-sm text-slate-500 mt-1">
           Time: {Math.floor(result.timeSpentSeconds / 60)} min
+          {(result.flaggedCount ?? 0) > 0 && ` · ${result.flaggedCount} flagged`}
         </p>
       </Card>
 
@@ -47,11 +49,11 @@ export function ExamResultSummary({
           {Object.entries(result.bySystem)
             .filter(([k]) => k !== "_unknown")
             .map(([sysId, data]) => {
-              const sys = MOCK_SYSTEMS.find((s) => s.id === sysId);
+              const name = systemNames[sysId] ?? sysId;
               return (
                 <div key={sysId} className="flex items-center justify-between">
                   <span className="font-medium text-slate-900 dark:text-white">
-                    {sys?.name ?? sysId}
+                    {name}
                   </span>
                   <div className="flex items-center gap-2">
                     <div className="w-24 h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
@@ -69,6 +71,54 @@ export function ExamResultSummary({
             })}
         </div>
       </Card>
+
+      {(() => {
+        const WEAK_THRESHOLD = 70;
+        const weakSystems = Object.entries(result.bySystem)
+          .filter(([k]) => k !== "_unknown")
+          .filter(([, d]) => d.percent < WEAK_THRESHOLD)
+          .sort(([, a], [, b]) => a.percent - b.percent);
+        if (weakSystems.length === 0) return null;
+        return (
+          <Card>
+            <h2 className="font-heading font-semibold text-slate-900 dark:text-white mb-4">
+              Areas to Review
+            </h2>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mb-3">
+              Systems below {WEAK_THRESHOLD}% — consider extra practice.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {weakSystems.map(([sysId, d]) => (
+                <Badge key={sysId} variant="warning" size="sm">
+                  {systemNames[sysId] ?? sysId}: {Math.round(d.percent)}%
+                </Badge>
+              ))}
+            </div>
+          </Card>
+        );
+      })()}
+
+      {result.byItemType && Object.keys(result.byItemType).filter((k) => k !== "_unknown").length > 0 && (
+        <Card>
+          <h2 className="font-heading font-semibold text-slate-900 dark:text-white mb-4">
+            By Question Type
+          </h2>
+          <div className="space-y-3">
+            {Object.entries(result.byItemType)
+              .filter(([k]) => k !== "_unknown")
+              .map(([typeKey, data]) => (
+                <div key={typeKey} className="flex items-center justify-between text-sm">
+                  <span className="text-slate-600 dark:text-slate-400 capitalize">
+                    {typeKey.replace(/_/g, " ")}
+                  </span>
+                  <span className="font-medium">
+                    {data.correct}/{data.total} ({Math.round(data.percent)}%)
+                  </span>
+                </div>
+              ))}
+          </div>
+        </Card>
+      )}
 
       <div className="flex flex-col sm:flex-row gap-4">
         <button

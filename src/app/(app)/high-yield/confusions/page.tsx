@@ -1,22 +1,20 @@
 import { getSessionUser } from "@/lib/auth/session";
-import { getProfile } from "@/lib/auth/profile";
+import { getPrimaryTrack } from "@/lib/auth/track";
 import { CommonConfusionCard } from "@/components/high-yield/CommonConfusionCard";
 import Link from "next/link";
 import { Icons } from "@/components/ui/icons";
-import { MOCK_COMMON_CONFUSIONS } from "@/data/mock/high-yield";
-
-function trackIdToSlug(trackId: string | null): "lvn" | "rn" | "fnp" | "pmhnp" {
-  if (!trackId) return "rn";
-  const map: Record<string, "lvn" | "rn" | "fnp" | "pmhnp"> = { lvn: "lvn", rn: "rn", fnp: "fnp", pmhnp: "pmhnp" };
-  return map[trackId] ?? "rn";
-}
+import { loadHighYieldFeed } from "@/lib/high-yield";
+import { getTrackDisplayName } from "@/lib/high-yield/track-display";
 
 export default async function CommonConfusionsPage() {
   const user = await getSessionUser();
-  const profile = user ? await getProfile(user.id) : null;
-  const track = trackIdToSlug(profile?.primary_exam_track_id ?? null);
+  const primary = await getPrimaryTrack(user?.id ?? null);
+  const track = primary?.trackSlug ?? "rn";
+  const trackId = primary?.trackId ?? null;
 
-  const confusions = MOCK_COMMON_CONFUSIONS.filter((c) => c.track === track);
+  const feed = await loadHighYieldFeed(trackId, track, 5);
+  const confusions = feed.confusions;
+  const trackName = getTrackDisplayName(track);
 
   return (
     <div className="p-6 lg:p-8 space-y-8">
@@ -31,9 +29,27 @@ export default async function CommonConfusionsPage() {
         Students Commonly Confuse This With…
       </h1>
       <p className="text-slate-600 dark:text-slate-400">
-        Key distinctions for {track.toUpperCase()}. Avoid mix-ups on the exam.
+        Key distinctions for the {trackName} exam. Avoid mix-ups.
       </p>
-      <CommonConfusionCard confusions={confusions} maxItems={20} />
+      {confusions.length === 0 ? (
+        <div className="rounded-xl border-2 border-dashed border-slate-200 dark:border-slate-700 p-12 text-center">
+          <p className="text-slate-500 dark:text-slate-400 font-medium">
+            No confusions data yet for {trackName}
+          </p>
+          <p className="text-sm text-slate-400 mt-1">
+            Confusions are derived from topic summaries. Content will appear as your track is populated.
+          </p>
+          <Link
+            href="/high-yield"
+            className="mt-4 inline-flex items-center gap-2 text-indigo-600 dark:text-indigo-400 hover:underline"
+          >
+            Return to High-Yield
+            {Icons.chevronRight}
+          </Link>
+        </div>
+      ) : (
+        <CommonConfusionCard confusions={confusions} track={track} maxItems={20} />
+      )}
     </div>
   );
 }

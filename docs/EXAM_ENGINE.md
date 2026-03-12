@@ -70,7 +70,7 @@ ExamSession {
 
 | Mode | Route | Questions | Time |
 |------|-------|-----------|------|
-| Pre-Practice | `/exam/pre-practice-{track}-{seed}` | 150 | 180 min |
+| Pre-Practice | `/exam/pre_practice-{track}-{seed}` | 150 | 180 min |
 | System | `/exam/system-{systemId}-{seed}` | 50+ | 120 min |
 | Readiness | `/exam/readiness-{track}-{seed}` | 30 | 45 min |
 | Custom | `/exam/custom-{seed}` | User-selected | Configurable |

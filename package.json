@@ -14,9 +14,14 @@
     "test": "vitest",
     "test:run": "vitest run",
     "test:ui": "vitest --ui",
+    "db:local:start": "supabase start",
+    "db:local:migrate": "supabase db reset",
+    "db:remote:push": "supabase db push",
+    "db:status": "supabase status",
     "db:reset": "supabase db reset",
     "db:seed": "supabase db reset",
     "seed:user": "tsx scripts/seed-user-data.ts",
+    "admin:bootstrap": "tsx scripts/bootstrap-admin.ts",
     "qa": "npm run typecheck && npm run lint && npm run format:check && npm run test:run"
   },
   "dependencies": {
@@ -26,13 +31,16 @@
     "openai": "^6.27.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "stripe": "^20.4.1"
+    "resend": "^6.9.3",
+    "stripe": "^20.4.1",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@types/node": "^22",
     "@types/react": "^18",
     "@types/react-dom": "^18",
     "@vitejs/plugin-react": "^5.1.4",
+    "dotenv": "^16.6.1",
     "eslint": "^8",
     "eslint-config-next": "14.2.18",
     "jsdom": "^28.1.0",

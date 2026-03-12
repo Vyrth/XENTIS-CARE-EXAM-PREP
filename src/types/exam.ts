@@ -25,7 +25,8 @@ export type ItemType = (typeof ITEM_TYPES)[number];
 
 /** Exam mode - determines question selection and rules */
 export type ExamMode =
-  | "pre_practice"   // 150 questions, track-based
+  | "pre_practice"   // 150 questions, track-based (legacy)
+  | "pre_practice_i" | "pre_practice_ii" | "pre_practice_iii" | "pre_practice_iv" | "pre_practice_v"
   | "system"        // 50+ per system
   | "custom_quiz"   // user-selected filters
   | "readiness";    // shorter diagnostic
@@ -51,6 +52,8 @@ export interface ExamSession {
   /** Per-question state */
   responses: Record<string, ExamResponse>;
   flags: Set<string>;
+  /** Per-question time spent in seconds (for exam_session_questions.time_spent_seconds) */
+  timeSpentPerQuestion?: Record<string, number>;
   /** Timer state at last save */
   timeRemainingSeconds: number;
   startedAt: string;

@@ -20,8 +20,8 @@ cp .env.local.example .env.local
 # Edit .env.local with your Supabase URL and keys
 
 # 3. Start Supabase (optional - for local DB)
-supabase start
-supabase db reset   # Runs migrations + seed
+npm run db:local:start
+npm run db:local:migrate   # Runs migrations + seed (local only)
 
 # 4. Run dev server
 npm run dev
@@ -33,7 +33,7 @@ npm run dev
 |----------|----------|-------------|
 | `NEXT_PUBLIC_SUPABASE_URL` | Yes | Supabase project URL |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Yes | Supabase anon key |
-| `SUPABASE_SERVICE_ROLE_KEY` | Webhooks, seed | Service role key (never expose in client) |
+| `SUPABASE_SERVICE_ROLE_KEY` | Webhooks, seed | Service role key — **never commit, never show in screenshots** |
 | `NEXT_PUBLIC_APP_URL` | Yes | App URL (e.g. http://localhost:3000) |
 | `STRIPE_SECRET_KEY` | Billing | Stripe secret key |
 | `STRIPE_WEBHOOK_SECRET` | Webhooks | Stripe webhook signing secret |
@@ -55,25 +55,31 @@ npm run dev
 | `npm run test:run` | Run tests once |
 | `npm run test:ui` | Vitest UI |
 | `npm run qa` | Full QA: typecheck + lint + format + test |
-| `npm run db:reset` | Supabase db reset (migrations + seed) |
-| `npm run db:seed` | Same as db:reset |
+| `npm run db:local:start` | Start local Supabase (Docker) |
+| `npm run db:local:migrate` | Reset local DB, run migrations + seed |
+| `npm run db:remote:push` | Push migrations to remote Supabase |
+| `npm run db:status` | Show local URL and keys |
+| `npm run db:reset` | Same as db:local:migrate |
+| `npm run db:seed` | Same as db:local:migrate |
 | `npm run seed:user` | Seed user data (run after signup) |
 
 ## Database
 
+See **[Local vs Remote Supabase Commands](LOCAL_VS_REMOTE_SUPABASE.md)** for a clear separation of workflows.
+
 ### Local Supabase
 
 ```bash
-supabase start
-supabase db reset   # Drops DB, runs migrations, runs seed
-supabase status    # Get local URL and keys
+npm run db:local:start    # Start Docker
+npm run db:local:migrate  # Drops DB, runs migrations, runs seed
+npm run db:status         # Get local URL and keys
 ```
 
 ### Remote Supabase
 
 1. Create project at [supabase.com](https://supabase.com)
-2. Run: `supabase db push` (or apply migrations manually)
-3. Run seed.sql via Supabase SQL Editor or `psql`
+2. Run: `npm run db:remote:push` (or `supabase db push`)
+3. Run seed.sql via Supabase SQL Editor or `psql` (push does not run seed)
 
 ### Seed User Data
 

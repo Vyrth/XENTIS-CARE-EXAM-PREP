@@ -27,12 +27,15 @@ export interface UserSubscription {
 export interface Entitlements {
   plan: "free" | "paid";
   questionsPerDay: number;
-  aiExplainPerDay: number;
-  aiMnemonicPerDay: number;
-  aiFlashcardsPerDay: number;
+  aiActionsPerDay: number;
   prePracticeAccess: "diagnostic_only" | "full";
   fullQuestionBank: boolean;
   fullSystemExams: boolean;
   advancedAnalytics: boolean;
   notebookExport: boolean;
+  studyGuidesLimit: number;
+  videosLimit: number;
+  flashcardDecksLimit: number;
+  notebookAccess: boolean;
+  basicReadinessAnalytics: boolean;
 }

@@ -45,4 +45,5 @@ export const FALLBACK_MESSAGES: Record<string, string> = {
   weak_area_coaching: "I couldn't generate coaching right now. Please try again or check your weak areas in the dashboard.",
   quiz_followup: "I couldn't generate quiz questions right now. Please try again.",
   generate_mnemonic: "I couldn't create a mnemonic right now. Please try again.",
+  notebook_summary: "I couldn't summarize that content right now. Please try again.",
 };

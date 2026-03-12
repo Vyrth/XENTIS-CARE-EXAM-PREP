@@ -24,14 +24,22 @@ export default function Error({
         Something went wrong
       </h1>
       <p className="mt-2 text-slate-600 dark:text-slate-400 max-w-md">
-        We&apos;ve been notified and are looking into it. Please try again.
+        Please try again or return to the dashboard.
       </p>
-      <button
-        onClick={reset}
-        className="mt-6 px-4 py-2 rounded-lg bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 font-medium hover:opacity-90 transition"
-      >
-        Try again
-      </button>
+      <div className="mt-6 flex gap-3">
+        <button
+          onClick={reset}
+          className="px-4 py-2 rounded-lg bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 font-medium hover:opacity-90 transition"
+        >
+          Try again
+        </button>
+        <a
+          href="/"
+          className="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 font-medium hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+        >
+          Go home
+        </a>
+      </div>
     </div>
   );
 }

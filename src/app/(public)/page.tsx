@@ -15,7 +15,7 @@ export default function LandingPage() {
             href="/login"
             className="px-6 py-3 bg-indigo-600 text-white rounded-xl font-medium hover:bg-indigo-700 transition-colors focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
           >
-            Get Started
+            Start Free
           </Link>
           <Link
             href="/pricing"
@@ -29,7 +29,7 @@ export default function LandingPage() {
         <Link href="/legal/terms" className="hover:underline mr-4">
           Terms
         </Link>
-        <Link href="/legal/privacy" className="hover:underline">
+        <Link href="/legal/privacy" className="hover:underline mr-4">
           Privacy
         </Link>
       </footer>

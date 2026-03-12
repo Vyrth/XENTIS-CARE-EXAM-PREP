@@ -1,17 +1,23 @@
-"use client";
-
-import { useParams } from "next/navigation";
 import Link from "next/link";
+import { getSessionUser } from "@/lib/auth/session";
+import { getPrimaryTrack } from "@/lib/auth/track";
+import { loadVideoById, loadStudyGuides } from "@/lib/content";
 import { Card } from "@/components/ui/Card";
 import { Icons } from "@/components/ui/icons";
-import { MOCK_VIDEOS } from "@/data/mock/videos";
-import { MOCK_SYSTEMS } from "@/data/mock/systems";
+import { VideoLessonClient } from "./VideoLessonClient";
 
-export default function VideoLessonPage() {
-  const params = useParams();
-  const videoId = params.videoId as string;
-  const video = MOCK_VIDEOS.find((v) => v.id === videoId);
-  const system = video ? MOCK_SYSTEMS.find((s) => s.id === video.systemId) : null;
+type Props = { params: Promise<{ videoId: string }> };
+
+export default async function VideoDetailPage({ params }: Props) {
+  const { videoId } = await params;
+  const user = await getSessionUser();
+  const primary = await getPrimaryTrack(user?.id ?? null);
+  const trackId = primary?.trackId ?? null;
+
+  const video = await loadVideoById(trackId, videoId);
+  const relatedGuides = video?.systemId
+    ? await loadStudyGuides(trackId, { systemId: video.systemId })
+    : [];
 
   if (!video) {
     return (
@@ -24,50 +30,21 @@ export default function VideoLessonPage() {
     );
   }
 
+  const durationMin = video.durationSeconds ? Math.round(video.durationSeconds / 60) : null;
+
   return (
-    <div className="p-6 lg:p-8 max-w-4xl mx-auto space-y-6">
-      <Link
-        href="/videos"
-        className="inline-flex items-center gap-2 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
-      >
-        <span className="inline-block rotate-180">{Icons.chevronRight}</span>
-        Back to Videos
-      </Link>
-
-      <h1 className="font-heading text-2xl font-bold text-slate-900 dark:text-white">
-        {video.title}
-      </h1>
-      <p className="text-slate-600 dark:text-slate-400">
-        {system?.name ?? "General"} · {video.duration} min
-      </p>
-
-      <Card className="aspect-video flex items-center justify-center bg-slate-900 rounded-xl">
-        <div className="text-center text-slate-400">
-          <span className="inline-block mb-2">{Icons.video}</span>
-          <p>Video player placeholder</p>
-          <p className="text-sm mt-1">Integrate with Vimeo, Wistia, or custom player</p>
-        </div>
-      </Card>
-
-      <Card>
-        <h2 className="font-heading font-semibold text-slate-900 dark:text-white mb-4">
-          Related Content
-        </h2>
-        <div className="space-y-2">
-          <Link
-            href={`/study-guides/sg-1`}
-            className="block p-3 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300"
-          >
-            Study Guide: {system?.name}
-          </Link>
-          <Link
-            href={`/questions/system/${system?.slug ?? "cardiovascular"}`}
-            className="block p-3 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300"
-          >
-            Practice Questions
-          </Link>
-        </div>
-      </Card>
-    </div>
+    <VideoLessonClient
+      video={{
+        id: video.id,
+        title: video.title,
+        description: video.description,
+        videoUrl: video.videoUrl,
+        durationMin,
+        systemName: video.systemName,
+        systemSlug: video.systemSlug,
+        transcript: video.transcript,
+      }}
+      relatedGuides={relatedGuides.map((g) => ({ id: g.id, title: g.title }))}
+    />
   );
 }

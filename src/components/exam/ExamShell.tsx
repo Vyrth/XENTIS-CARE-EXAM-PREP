@@ -25,6 +25,9 @@ export interface ExamShellProps {
     options?: { key: string; text: string; isCorrect?: boolean }[];
     imageUrl?: string;
     caseStudyTabs?: { id: string; title: string; content: string }[];
+    leadIn?: string;
+    instructions?: string;
+    chartTableData?: Record<string, unknown>;
     selectN?: number;
     matrixRows?: string[];
     matrixCols?: string[];
@@ -134,7 +137,13 @@ export function ExamShell({
         <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
           Question {questionNumber} · {question.type.replace(/_/g, " ")}
         </p>
+        {question.leadIn && (
+          <p className="text-slate-600 dark:text-slate-300 mb-4 italic">{question.leadIn}</p>
+        )}
         <p className="text-slate-900 dark:text-white mb-6">{question.stem}</p>
+        {question.instructions && (
+          <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">{question.instructions}</p>
+        )}
         <Renderer
           question={question}
           response={response}

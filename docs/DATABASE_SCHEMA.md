@@ -47,12 +47,15 @@ profiles (auth.users) ──┬── user_exam_tracks
 
 ## Running Migrations
 
+See **[Local vs Remote Supabase Commands](LOCAL_VS_REMOTE_SUPABASE.md)** to avoid mixing local and remote workflows.
+
 ```bash
 # Local (requires Docker)
-supabase db reset
+npm run db:local:start
+npm run db:local:migrate   # supabase db reset
 
-# Remote
-supabase db push
+# Remote (hosted project)
+npm run db:remote:push     # supabase db push
 
 # Or apply manually via Supabase Dashboard SQL Editor
 ```

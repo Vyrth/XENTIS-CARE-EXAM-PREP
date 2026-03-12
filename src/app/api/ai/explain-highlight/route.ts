@@ -1,6 +1,7 @@
 /**
  * Explain Highlighted Text - POST /api/ai/explain-highlight
  * Board-prep tutor for selected text. Structured output with explanation, board tip, mnemonic, next step.
+ * Track is resolved from signed-in user's primary track (hard constraint).
  */
 
 import { NextResponse } from "next/server";
@@ -8,7 +9,15 @@ import { createClient } from "@/lib/supabase/server";
 import { getSessionUser } from "@/lib/auth/session";
 import { isOpenAIConfigured } from "@/lib/ai/openai-client";
 import { runExplainHighlight } from "@/lib/ai/explain-highlight";
+import { retrieveForExplainHighlight } from "@/lib/ai/retrieval/retrieve-for-action";
+import {
+  buildAdaptiveContext,
+  analyticsToAdaptiveInput,
+} from "@/lib/readiness/adaptive-context";
 import { logAIInteraction } from "@/lib/ai/logging";
+import { canPerformAIAction } from "@/lib/billing/entitlements";
+import { enforceJadeTrackContext } from "@/lib/ai/jade-track-context";
+import { loadAnalyticsForJade } from "@/lib/ai/jade-analytics";
 import type { ExamTrack, ExplainMode } from "@/lib/ai/explain-highlight/types";
 
 const VALID_TRACKS: ExamTrack[] = ["lvn", "rn", "fnp", "pmhnp"];
@@ -20,6 +29,22 @@ const VALID_MODES: ExplainMode[] = [
 ];
 const MAX_SELECTED_TEXT = 2000;
 
+interface AnalyticsPayload {
+  readinessScore?: number;
+  readinessBand?: string;
+  weakSystems?: { name: string; percent?: number }[];
+  weakDomains?: { name: string; percent?: number }[];
+  weakSkills?: { name: string; percent?: number }[];
+  weakItemTypes?: { name: string; percent?: number }[];
+  overconfidentRanges?: string[];
+  underconfidentRanges?: string[];
+  confidenceCalibration?: number;
+  recentMistakes?: string[];
+  studyGuideCompletion?: number;
+  videoCompletion?: number;
+  lastStudyMaterialsCompleted?: string[];
+}
+
 interface RequestBody {
   selectedText?: string;
   examTrack?: string;
@@ -28,6 +53,8 @@ interface RequestBody {
   sourceType?: string;
   sourceId?: string;
   mode?: string;
+  /** Optional analytics for adaptive AI - personalizes explanations by readiness */
+  analytics?: AnalyticsPayload;
 }
 
 function validateRequest(body: RequestBody): { valid: true; data: RequestBody } | { valid: false; error: string; status: number } {
@@ -48,7 +75,7 @@ function validateRequest(body: RequestBody): { valid: true; data: RequestBody } 
     };
   }
 
-  if (!body.examTrack || !VALID_TRACKS.includes(body.examTrack as ExamTrack)) {
+  if (body.examTrack && !VALID_TRACKS.includes(body.examTrack as ExamTrack)) {
     return {
       valid: false,
       error: `examTrack must be one of: ${VALID_TRACKS.join(", ")}`,
@@ -96,11 +123,59 @@ export async function POST(request: Request) {
   }
 
   const user = await getSessionUser();
+  if (!user) {
+    return NextResponse.json(
+      { error: "Sign in required to use Jade Tutor", code: "UNAUTHORIZED" },
+      { status: 401 }
+    );
+  }
+
+  const aiCheck = await canPerformAIAction(user.id);
+  if (!aiCheck.allowed) {
+    return NextResponse.json(
+      {
+        error: `Daily Jade Tutor limit reached (${aiCheck.used}/${aiCheck.limit}). Upgrade for unlimited access.`,
+        code: "ENTITLEMENT_LIMIT",
+        upgradeRequired: true,
+      },
+      { status: 402 }
+    );
+  }
+
+  const trackContext = await enforceJadeTrackContext(
+    user.id,
+    data.examTrack,
+    "explain_highlight"
+  );
+  if (!trackContext) {
+    return NextResponse.json(
+      { error: "Complete onboarding to set your exam track", code: "NO_TRACK" },
+      { status: 400 }
+    );
+  }
+  const examTrack = trackContext.track;
+
+  const [retrieveResult, analytics] = await Promise.all([
+    retrieveForExplainHighlight({
+      query: data.selectedText!.trim(),
+      examTrack,
+      topicId: data.topicId,
+      systemId: data.systemId,
+      sourceType: data.sourceType,
+      sourceId: data.sourceId,
+    }),
+    loadAnalyticsForJade(user.id),
+  ]);
+  const { context: retrievedContext } = retrieveResult;
+
+  const adaptiveContext = analytics
+    ? buildAdaptiveContext(analyticsToAdaptiveInput(analytics))
+    : null;
 
   const result = await runExplainHighlight(
     {
       selectedText: data.selectedText!.trim(),
-      examTrack: data.examTrack as ExamTrack,
+      examTrack,
       topicId: data.topicId,
       systemId: data.systemId,
       sourceType: data.sourceType,
@@ -109,16 +184,17 @@ export async function POST(request: Request) {
     },
     {
       userId: user?.id,
-      // retrievedContext: await getRetrievedContext(...) — inject when RAG is ready
+      retrievedContext,
+      adaptiveContext,
     }
   );
 
   const supabase = await createClient();
   await logAIInteraction(
     {
-      userId: user?.id,
+      userId: user.id,
       action: "explain_highlight",
-      track: data.examTrack as ExamTrack,
+      track: examTrack,
       promptTokens: result.promptTokens,
       completionTokens: result.completionTokens,
       model: "gpt-4o-mini",
@@ -141,6 +217,13 @@ export async function POST(request: Request) {
   return NextResponse.json({
     success: true,
     data: result.data,
+    ...(adaptiveContext && {
+      remediationSuggestions:
+        adaptiveContext.remediationSuggestions?.length > 0
+          ? adaptiveContext.remediationSuggestions
+          : undefined,
+      learnerProfile: adaptiveContext.learnerProfile,
+    }),
     usage:
       result.promptTokens != null
         ? {

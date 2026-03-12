@@ -9,7 +9,7 @@ The platform uses a two-phase seed approach:
 
 ## Content Seed (`supabase/seed.sql` + `seed_extended.sql`)
 
-Runs automatically with `supabase db reset` or `npm run db:seed`.
+Runs automatically with `npm run db:local:migrate` or `npm run db:seed` (local only).
 
 ### What Gets Seeded
 

@@ -1,0 +1,28 @@
+{
+  "crons": [
+    {
+      "path": "/api/admin/process-batch-queue",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/trial-reminders",
+      "schedule": "0 14 * * *"
+    },
+    {
+      "path": "/api/cron/autonomous-content?mode=process-shards",
+      "schedule": "0 */2 * * *"
+    },
+    {
+      "path": "/api/cron/autonomous-content?mode=nightly-underfill",
+      "schedule": "0 2 * * *"
+    },
+    {
+      "path": "/api/cron/autonomous-content?mode=weekly-rebalance",
+      "schedule": "0 3 * * 0"
+    },
+    {
+      "path": "/api/cron/autonomous-content?mode=monthly-low-coverage",
+      "schedule": "0 4 1 * *"
+    }
+  ]
+}

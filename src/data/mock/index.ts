@@ -1,10 +1,7 @@
+/**
+ * data/mock - Shared types only (no runtime mock data).
+ * Runtime imports use @/data/mock/types for TrackSlug, Question, Note, etc.
+ * Mock data files (admin, questions, readiness, etc.) were removed in Phase 2D
+ * as they had no runtime or test imports.
+ */
 export * from "./types";
-export * from "./systems";
-export * from "./questions";
-export * from "./lab-refs";
-export * from "./study-guides";
-export * from "./flashcards";
-export * from "./videos";
-export * from "./recommendations";
-export * from "./performance";
-export * from "./notes";

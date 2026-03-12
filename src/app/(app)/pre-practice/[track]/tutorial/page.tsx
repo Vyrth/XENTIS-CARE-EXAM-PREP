@@ -76,7 +76,7 @@ export default function PrePracticeTutorialPage() {
         </button>
         {isLast ? (
           <Link
-            href={`/exam/pre-practice-${track}-${Date.now()}`}
+            href={`/exam/pre_practice-${track}-${Date.now()}`}
             className="px-6 py-2 rounded-lg bg-indigo-600 text-white font-medium hover:bg-indigo-700"
           >
             Start Exam

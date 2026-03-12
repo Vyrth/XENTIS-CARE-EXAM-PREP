@@ -7,6 +7,8 @@ export interface ReadinessGaugeProps {
   band: string;
   color: "red" | "amber" | "emerald" | "green";
   target?: number;
+  /** When true and score is 0, show "No data yet" instead of "0%" (zero-state truthfulness) */
+  hasActivity?: boolean;
 }
 
 const colorClasses = {
@@ -16,9 +18,10 @@ const colorClasses = {
   green: "text-green-600 dark:text-green-400",
 };
 
-export function ReadinessGauge({ score, band, color, target = 80 }: ReadinessGaugeProps) {
+export function ReadinessGauge({ score, band, color, target = 80, hasActivity = true }: ReadinessGaugeProps) {
   const gap = target - score;
   const gapText = gap > 0 ? `${gap}% to target` : "At or above target";
+  const showNoData = score === 0 && !hasActivity;
 
   return (
     <Card>
@@ -28,15 +31,15 @@ export function ReadinessGauge({ score, band, color, target = 80 }: ReadinessGau
       <div className="flex flex-col items-center">
         <div
           className={`text-4xl font-bold ${colorClasses[color]}`}
-          aria-label={`Readiness: ${score}%`}
+          aria-label={showNoData ? "Readiness: No data yet" : `Readiness: ${score}%`}
         >
-          {score}%
+          {showNoData ? "No data yet" : `${score}%`}
         </div>
         <p className="text-sm font-medium text-slate-600 dark:text-slate-400 mt-1">
-          {band}
+          {showNoData ? "Answer questions to build readiness" : band}
         </p>
         <p className="text-xs text-slate-500 dark:text-slate-500 mt-0.5">
-          {gapText}
+          {showNoData ? "Target: 80%" : gapText}
         </p>
         <div className="w-full mt-4 h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
           <div
@@ -49,7 +52,7 @@ export function ReadinessGauge({ score, band, color, target = 80 }: ReadinessGau
                     ? "bg-emerald-500"
                     : "bg-green-500"
             }`}
-            style={{ width: `${Math.min(100, score)}%` }}
+            style={{ width: `${showNoData ? 0 : Math.min(100, score)}%` }}
           />
         </div>
       </div>

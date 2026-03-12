@@ -67,7 +67,7 @@ export function HighlightableText({
             onClick={handleAskAI}
             className="px-2 py-1 text-sm text-white hover:bg-slate-700 rounded"
           >
-            Ask AI
+            Jade Tutor
           </button>
           <button
             type="button"

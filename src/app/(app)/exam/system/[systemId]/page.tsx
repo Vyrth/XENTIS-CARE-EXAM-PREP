@@ -1,75 +1,55 @@
-"use client";
-
-import { useParams, useRouter } from "next/navigation";
-import { useState, useEffect } from "react";
 import Link from "next/link";
-import { Card } from "@/components/ui/Card";
-import { getQuestionIdsForExam } from "@/lib/exam/question-bank";
-import { MOCK_SYSTEMS } from "@/data/mock/systems";
+import { notFound } from "next/navigation";
+import { getSessionUser } from "@/lib/auth/session";
+import { getPrimaryTrack } from "@/lib/auth/track";
+import { canAccessSystemExams } from "@/lib/billing/entitlements";
+import { loadSystemExamBySystemId } from "@/lib/exam/loaders";
+import { loadQuestionIds } from "@/lib/questions/loaders";
 import { SYSTEM_EXAM_MIN_QUESTIONS } from "@/types/exam";
+import { SystemExamStartClient } from "./SystemExamStartClient";
+import { UpgradePrompt } from "@/components/billing/UpgradePrompt";
 
-export default function SystemExamStartPage() {
-  const params = useParams();
-  const router = useRouter();
-  const systemId = params.systemId as string;
-  const system = MOCK_SYSTEMS.find((s) => s.id === systemId);
+type Props = { params: Promise<{ systemId: string }> };
 
-  const [ready, setReady] = useState(false);
-  const [questionCount, setQuestionCount] = useState(0);
+export default async function SystemExamStartPage({ params }: Props) {
+  const { systemId } = await params;
+  const user = await getSessionUser();
+  const primary = await getPrimaryTrack(user?.id ?? null);
+  const trackId = primary?.trackId ?? null;
 
-  useEffect(() => {
-    const seed = Date.now() % 100000;
-    const ids = getQuestionIdsForExam({
-      mode: "system",
-      systemId,
-      seed,
-    });
-    setQuestionCount(ids.length);
-    setReady(ids.length >= SYSTEM_EXAM_MIN_QUESTIONS);
-  }, [systemId]);
+  if (!trackId) notFound();
 
-  const handleStart = () => {
-    const seed = Date.now() % 100000;
-    router.push(`/exam/system-${systemId}-${seed}`);
-  };
-
-  if (!system) {
+  const canAccess = user ? await canAccessSystemExams(user.id) : false;
+  if (!canAccess) {
     return (
-      <div className="p-6">
-        <p className="text-slate-500">System not found.</p>
-        <Link href="/questions" className="text-indigo-600 mt-4 inline-block">Back</Link>
+      <div className="p-6 lg:p-8 max-w-xl mx-auto">
+        <UpgradePrompt
+          reason="System exams require a paid plan"
+          usage="Unlock 50+ question system exams with Pro"
+          variant="card"
+        />
       </div>
     );
   }
 
+  const [exam, questionIds] = await Promise.all([
+    loadSystemExamBySystemId(trackId, systemId),
+    loadQuestionIds(trackId, { systemId }, 100, 0),
+  ]);
+
+  if (!exam) notFound();
+
+  const questionCount = questionIds.length;
+  const canStart = questionCount >= SYSTEM_EXAM_MIN_QUESTIONS;
+
   return (
-    <div className="p-6 lg:p-8 max-w-2xl mx-auto space-y-8">
-      <h1 className="font-heading text-2xl font-bold text-slate-900 dark:text-white">
-        System Exam: {system.name}
-      </h1>
-      <p className="text-slate-600 dark:text-slate-400">
-        {questionCount} questions available. Minimum {SYSTEM_EXAM_MIN_QUESTIONS} required.
-      </p>
-
-      <Card>
-        <p className="text-slate-700 dark:text-slate-300">
-          System exams focus on a single body system. No time limit for practice mode.
-        </p>
-      </Card>
-
-      <div className="flex gap-4">
-        <Link href="/questions" className="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600">
-          Cancel
-        </Link>
-        <button
-          type="button"
-          onClick={handleStart}
-          disabled={!ready}
-          className="px-6 py-2 rounded-lg bg-indigo-600 text-white font-medium hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          Start Exam
-        </button>
-      </div>
-    </div>
+    <SystemExamStartClient
+      systemId={systemId}
+      systemName={exam.systemName}
+      examName={exam.name}
+      questionCount={questionCount}
+      canStart={canStart}
+      minRequired={SYSTEM_EXAM_MIN_QUESTIONS}
+    />
   );
 }

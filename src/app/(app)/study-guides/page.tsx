@@ -1,15 +1,18 @@
-import { Card } from "@/components/ui/Card";
+import { getSessionUser } from "@/lib/auth/session";
+import { getPrimaryTrack } from "@/lib/auth/track";
+import { loadStudyGuides } from "@/lib/content";
 import { ActionTile } from "@/components/ui/ActionTile";
+import { EmptyContentState } from "@/components/content/EmptyContentState";
 import { Icons } from "@/components/ui/icons";
-import { MOCK_SYSTEMS } from "@/data/mock/systems";
 
-export default function StudyGuidesPage() {
-  const guides = [
-    { id: "sg-1", name: "Cardiovascular", sections: 3, track: "rn" as const },
-    { id: "sg-2", name: "Respiratory", sections: 2, track: "lvn" as const },
-    { id: "sg-3", name: "Renal", sections: 2, track: "fnp" as const },
-    { id: "sg-4", name: "Psychiatric", sections: 2, track: "pmhnp" as const },
-  ];
+export default async function StudyGuidesPage() {
+  const user = await getSessionUser();
+  const primary = await getPrimaryTrack(user?.id ?? null);
+  const track = primary?.trackSlug ?? "rn";
+  const trackId = primary?.trackId ?? null;
+
+  const guides = await loadStudyGuides(trackId);
+  const hasGuides = guides.length > 0;
 
   return (
     <div className="p-6 lg:p-8 space-y-6">
@@ -17,21 +20,31 @@ export default function StudyGuidesPage() {
         Study Guides
       </h1>
       <p className="text-slate-600 dark:text-slate-400">
-        Detailed study materials by system. Highlight text to Ask AI or Save to Notebook.
+        Detailed study materials by system. Highlight text to ask Jade Tutor or Save to Notebook.
+        {primary && ` — ${track.toUpperCase()} track`}
       </p>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {guides.map((g) => (
-          <ActionTile
-            key={g.id}
-            href={`/study-guides/${g.id}`}
-            title={g.name}
-            description={`${g.sections} sections`}
-            icon={Icons["book-open"]}
-            trackColor={g.track}
-          />
-        ))}
-      </div>
+      {!hasGuides ? (
+        <EmptyContentState
+          title="No study guides yet for your track"
+          description={`The study guide library for ${track.toUpperCase()} is empty. Content will appear here once published.`}
+          trackSlug={track}
+          contentType="study guides"
+        />
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {guides.map((g) => (
+            <ActionTile
+              key={g.id}
+              href={`/study-guides/${g.id}`}
+              title={g.title}
+              description={`${g.sectionCount} section${g.sectionCount === 1 ? "" : "s"}${g.systemName ? ` · ${g.systemName}` : ""}`}
+              icon={Icons["book-open"]}
+              trackColor={track as "lvn" | "rn" | "fnp" | "pmhnp"}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

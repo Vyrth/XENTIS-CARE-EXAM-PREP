@@ -30,6 +30,7 @@ function rankTopic(
   topicName: string,
   systemId: string,
   systemName: string,
+  systemSlug: string | undefined,
   track: TrackSlug,
   blueprint: TopicBlueprintWeight | null,
   telemetry: TelemetrySignal | null,
@@ -82,6 +83,7 @@ function rankTopic(
     topicName,
     systemId,
     systemName,
+    systemSlug,
     track,
     score: Math.round(score * 10) / 10,
     whyHighYield,
@@ -94,7 +96,7 @@ export interface RankingInputs {
   systemBlueprint: BlueprintWeight[];
   telemetry: TelemetrySignal[];
   studentSignal: StudentSignal[];
-  topics: { id: string; name: string; systemId: string; systemName: string }[];
+  topics: { id: string; name: string; systemId: string; systemName: string; systemSlug?: string }[];
 }
 
 /** Get top high-yield topics for a track */
@@ -118,6 +120,7 @@ export function getHighYieldTopics(
       t.name,
       t.systemId,
       t.systemName,
+      t.systemSlug,
       track,
       topicBlueprintByTrack.find((b) => b.topicId === t.id) ?? null,
       telemetryByTopic.get(t.id) ?? null,

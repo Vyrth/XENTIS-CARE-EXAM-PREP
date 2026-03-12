@@ -42,14 +42,15 @@ export function buildConfidenceBuckets(
   });
 }
 
-/** Overall calibration score (0-100): % of buckets that are calibrated, weighted by volume */
+/** Overall calibration score (0-100): % of buckets that are calibrated, weighted by volume.
+ * Returns 0 when no data (zero-state truthfulness). */
 export function computeCalibrationScore(buckets: ConfidenceBucket[]): number {
-  if (buckets.length === 0) return 100;
+  if (buckets.length === 0) return 0;
   let weighted = 0;
   let total = 0;
   for (const b of buckets) {
     weighted += b.total * (b.calibrated ? 100 : 0);
     total += b.total;
   }
-  return total > 0 ? Math.round((weighted / total)) : 100;
+  return total > 0 ? Math.round(weighted / total) : 0;
 }

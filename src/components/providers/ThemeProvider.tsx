@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 
 type Theme = "light" | "dark" | "system";
 
@@ -16,6 +16,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setThemeState] = useState<Theme>("system");
   const [resolvedTheme, setResolvedTheme] = useState<"light" | "dark">("light");
   const [mounted, setMounted] = useState(false);
+  const lastResolvedRef = useRef<"light" | "dark">("light");
 
   useEffect(() => {
     setMounted(true);
@@ -29,10 +30,17 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     const root = document.documentElement;
     const systemDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
     const isDark = theme === "dark" || (theme === "system" && systemDark);
+    const nextResolved: "light" | "dark" = isDark ? "dark" : "light";
 
     root.classList.toggle("dark", isDark);
-    setResolvedTheme(isDark ? "dark" : "light");
-    localStorage.setItem("theme", theme);
+    // Only update state when resolved theme actually changes (avoids render loops)
+    if (lastResolvedRef.current !== nextResolved) {
+      lastResolvedRef.current = nextResolved;
+      setResolvedTheme(nextResolved);
+    }
+    if (localStorage.getItem("theme") !== theme) {
+      localStorage.setItem("theme", theme);
+    }
   }, [theme, mounted]);
 
   const setTheme = (t: Theme) => setThemeState(t);

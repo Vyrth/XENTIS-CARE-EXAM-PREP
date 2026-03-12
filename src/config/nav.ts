@@ -4,12 +4,13 @@ export const PRIMARY_NAV = [
   { href: "/questions", label: "Questions", icon: "help-circle" },
   { href: "/topics", label: "Topic Hub", icon: "book" },
   { href: "/pre-practice", label: "Pre-Practice Exam", icon: "file-check" },
+  { href: "/adaptive-exam", label: "Adaptive Exam", icon: "trending-up" },
   { href: "/practice", label: "Practice Exams", icon: "clipboard-list" },
   { href: "/flashcards", label: "Flashcards", icon: "layers" },
   { href: "/videos", label: "Videos", icon: "video" },
   { href: "/study-guides", label: "Study Guides", icon: "book-open" },
   { href: "/notebook", label: "Notebook", icon: "notebook" },
-  { href: "/ai-tutor", label: "AI Tutor", icon: "sparkles" },
+  { href: "/ai-tutor", label: "Jade Tutor", icon: "sparkles" },
   { href: "/high-yield", label: "High-Yield", icon: "layers" },
   { href: "/progress", label: "Progress", icon: "trending-up" },
   { href: "/weak-areas", label: "Weak Areas", icon: "trending-up" },
@@ -20,6 +21,7 @@ export const PRIMARY_NAV = [
 ] as const;
 
 export const ADMIN_NAV = [
+  { href: "/dashboard", label: "Main app", icon: "layout-dashboard" },
   { href: "/admin", label: "Overview", icon: "layout-dashboard" },
   { href: "/admin/curriculum", label: "Curriculum", icon: "book" },
   { href: "/admin/system-bundles", label: "System Bundles", icon: "book" },
@@ -34,6 +36,12 @@ export const ADMIN_NAV = [
   { href: "/admin/mastery-rules", label: "Mastery Rules", icon: "trending-up" },
   { href: "/admin/recommendations", label: "Recommendations", icon: "sparkles" },
   { href: "/admin/issue-reports", label: "Issue Reports", icon: "inbox" },
+  { href: "/admin/high-yield", label: "High-Yield", icon: "layers" },
+  { href: "/admin/exams", label: "Exam Assembly", icon: "clipboard-list" },
+  { href: "/admin/batch-planner", label: "Batch Planner", icon: "clipboard-list" },
+  { href: "/admin/content-inventory", label: "Content Inventory", icon: "bar-chart" },
+  { href: "/admin/launch-readiness", label: "Launch Readiness", icon: "file-check" },
+  { href: "/admin/blueprint-coverage", label: "Blueprint Coverage", icon: "bar-chart" },
   { href: "/admin/analytics", label: "Analytics", icon: "bar-chart" },
 ] as const;
 

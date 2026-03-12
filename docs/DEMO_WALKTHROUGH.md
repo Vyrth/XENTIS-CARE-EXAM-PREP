@@ -4,7 +4,7 @@ A step-by-step guide for demonstrating the nursing board-prep platform.
 
 ## Prerequisites
 
-1. Run `npm run db:seed` (or `supabase db reset`)
+1. Run `npm run db:local:migrate` (local only — see [Local vs Remote Supabase](LOCAL_VS_REMOTE_SUPABASE.md))
 2. Run `npm run dev`
 3. Sign up at /signup
 4. Run `npm run seed:user -- --userId=YOUR_UUID`

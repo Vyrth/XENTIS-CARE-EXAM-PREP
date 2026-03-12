@@ -10,11 +10,39 @@ Question stem:
 
 Correct answer: {{correctAnswer}}
 Rationale: {{rationale}}
+{{questionContext}}
 
 Platform context (use to enrich your explanation):
 {{retrievedContext}}
 
 Provide a clear, educational explanation. If the student is preparing for {{track}}, tailor your explanation to that exam.`,
+  explain_question_board: `Give a board-exam focused tip for this question. Be concise and high-yield.
+
+Question stem:
+{{questionStem}}
+
+Correct answer: {{correctAnswer}}
+Rationale: {{rationale}}
+{{topicContext}}
+
+Platform context:
+{{retrievedContext}}
+
+Provide 2-4 bullet points: key takeaway, common trap, board tip, memory cue.`,
+  explain_question_why_wrong: `The student got this question wrong. Explain why the correct answer is right AND why each wrong option is wrong (common misconceptions).
+
+Question stem:
+{{questionStem}}
+
+Correct answer: {{correctAnswer}}
+Student selected: {{selectedAnswer}}
+Rationale: {{rationale}}
+Distractors: {{distractors}}
+
+Platform context:
+{{retrievedContext}}
+
+For each wrong option, explain the misconception that leads students to choose it. Be specific and educational. If the student is preparing for {{track}}, tailor to that exam.`,
 
   explain_highlight: `The student highlighted this text and wants an explanation:
 
@@ -60,6 +88,9 @@ Produce a clear, organized summary suitable for quick review. Use bullet points 
 
 Weak systems: {{weakSystems}}
 Weak domains: {{weakDomains}}
+Weak skills: {{weakSkills}}
+Weak item types: {{weakItemTypes}}
+Readiness band: {{readinessBand}}
 
 Platform context:
 {{retrievedContext}}
@@ -69,7 +100,7 @@ Provide:
 2. 3-5 specific study recommendations
 3. Suggested practice approach
 
-Be encouraging and actionable.`,
+Be encouraging and actionable. Use board-prep coaching tone, not generic life coaching.`,
 
   quiz_followup: `Generate 5 follow-up practice questions based on this content. Format as JSON array:
 [{"stem": "...", "options": ["A...", "B...", "C...", "D..."], "correctKey": "A"}]
@@ -95,6 +126,16 @@ Mnemonic types:
 - compare_contrast: Memory cue that contrasts with similar concept
 
 Provide one clear mnemonic. Make it memorable and accurate.`,
+
+  notebook_summary: `Convert this note/content into a clean, board-focused summary for {{track}} exam prep.
+
+Content:
+{{noteText}}
+
+Platform context:
+{{retrievedContext}}
+
+Provide: cleaned summary, key takeaways, high-yield facts, common confusion, board tip. Optionally suggest a mnemonic if one fits. Use clear structure (bullets, headings) for easy saving to notes.`,
 } as const;
 
 export function fillTemplate(

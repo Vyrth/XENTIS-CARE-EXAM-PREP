@@ -18,6 +18,7 @@ import type {
   SummarizeNoteParams,
   WeakAreaCoachParams,
   MnemonicGeneratorParams,
+  NotebookSummaryParams,
 } from "./types";
 
 const TRACK_NAMES: Record<string, string> = {
@@ -46,6 +47,8 @@ const SYSTEM_PROMPTS: Record<TutorMode, string> = {
     "You are a nursing tutor. Provide actionable coaching for weak areas. Be encouraging.",
   mnemonic_generator:
     "You are a nursing tutor. Create memorable mnemonics for exam prep.",
+  notebook_summary:
+    "You are a nursing tutor. Convert messy notes into clean, board-focused summaries.",
 };
 
 /** Build user prompt for each mode */
@@ -135,6 +138,9 @@ Produce a clear, organized summary suitable for quick review. Use bullet points 
 
 Weak systems: ${p.weakSystems.join(", ") || "None"}
 Weak domains: ${p.weakDomains.join(", ") || "None"}
+Weak skills: ${p.weakSkills?.join(", ") || "None"}
+Weak item types: ${p.weakItemTypes?.join(", ") || "None"}
+Readiness band: ${p.readinessBand ?? "unknown"}
 
 Platform context:
 ${ctx}
@@ -144,7 +150,7 @@ Provide:
 2. 3-5 specific study recommendations
 3. Suggested practice approach
 
-Be encouraging and actionable.`;
+Be encouraging and actionable. Use board-prep coaching tone, not generic life coaching.`;
       return { systemPrompt, userPrompt };
     }
 
@@ -157,6 +163,27 @@ Platform context:
 ${ctx}
 
 Provide one clear mnemonic. Make it memorable and accurate.`;
+      return { systemPrompt, userPrompt };
+    }
+
+    case "notebook_summary": {
+      const p = params as NotebookSummaryParams;
+      const mode = p.summaryMode ?? "clean_summary";
+      const modeHint =
+        mode === "high_yield"
+          ? "Extract high-yield facts for board exams."
+          : mode === "board_focus"
+            ? "Focus on exam question types and traps."
+            : "Clean and organize the content.";
+      const userPrompt = `Convert this note/content into a clean, board-focused summary for ${trackName} exam prep. ${modeHint}
+
+Content:
+${p.noteText}
+
+Platform context:
+${ctx}
+
+Provide: cleaned summary, key takeaways, high-yield facts, common confusion, board tip. Optionally suggest a mnemonic if one fits.`;
       return { systemPrompt, userPrompt };
     }
 

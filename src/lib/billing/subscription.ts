@@ -1,9 +1,13 @@
 /**
  * Subscription service - read user_subscriptions, sync from Stripe
+ *
+ * Trial model: status=trialing + current_period_end in future = full access (PAID_ENTITLEMENTS).
+ * After trial expires, user gets FREE_ENTITLEMENTS until they upgrade.
  */
 
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
+import { isSupabaseServiceRoleConfigured } from "@/lib/supabase/env";
 import { FREE_ENTITLEMENTS, PAID_ENTITLEMENTS } from "@/config/billing";
 import type { UserSubscription, Entitlements } from "@/types/billing";
 
@@ -30,6 +34,38 @@ export function getSubscriptionByStripeCustomer(stripeCustomerId: string) {
     .select("*")
     .eq("stripe_customer_id", stripeCustomerId)
     .single();
+}
+
+/** Create 1-month free trial subscription for new learners. No-op if user already has a subscription. */
+export async function createFreeTrialSubscription(userId: string): Promise<{ created: boolean; error?: string }> {
+  if (!isSupabaseServiceRoleConfigured()) {
+    return { created: false, error: "Service role not configured" };
+  }
+  const supabase = createServiceClient();
+  const { data: existing } = await supabase
+    .from("user_subscriptions")
+    .select("id")
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (existing) return { created: false };
+
+  const now = new Date();
+  const periodEnd = new Date(now);
+  periodEnd.setDate(periodEnd.getDate() + 30);
+
+  const { error } = await supabase.from("user_subscriptions").insert({
+    user_id: userId,
+    subscription_plan_id: null,
+    stripe_customer_id: null,
+    stripe_subscription_id: null,
+    stripe_price_id: null,
+    status: "trialing",
+    current_period_start: now.toISOString(),
+    current_period_end: periodEnd.toISOString(),
+    cancel_at_period_end: false,
+  });
+  if (error) return { created: false, error: error.message };
+  return { created: true };
 }
 
 /** Upsert user_subscriptions (service role only) */
@@ -63,9 +99,14 @@ export function hasActiveSubscription(sub: UserSubscription | null): boolean {
 /** Check if subscription is still valid (active or within grace period) */
 export function isSubscriptionValid(sub: UserSubscription | null): boolean {
   if (!sub) return false;
-  if (ACTIVE_STATUSES.includes(sub.status as (typeof ACTIVE_STATUSES)[number])) return true;
-  if (sub.status === "canceled" && sub.currentPeriodEnd) {
-    return new Date(sub.currentPeriodEnd) > new Date();
+  const periodEnd = (sub as { currentPeriodEnd?: string; current_period_end?: string }).currentPeriodEnd
+    ?? (sub as { current_period_end?: string }).current_period_end;
+  if (ACTIVE_STATUSES.includes(sub.status as (typeof ACTIVE_STATUSES)[number])) {
+    if (sub.status === "trialing" && periodEnd && new Date(periodEnd) <= new Date()) return false;
+    return true;
+  }
+  if (sub.status === "canceled" && periodEnd) {
+    return new Date(periodEnd) > new Date();
   }
   return false;
 }

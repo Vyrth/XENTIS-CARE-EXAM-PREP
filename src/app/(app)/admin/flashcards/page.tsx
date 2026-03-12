@@ -1,45 +1,57 @@
 import Link from "next/link";
 import { Card } from "@/components/ui/Card";
-import { StatusBadge } from "@/components/admin/StatusBadge";
-import { MOCK_FLASHCARD_DECKS, MOCK_FLASHCARDS } from "@/data/mock/flashcards";
-import { MOCK_FLASHCARDS_ADMIN } from "@/data/mock/admin";
-import { MOCK_SYSTEMS } from "@/data/mock/systems";
-import type { WorkflowStatus } from "@/types/admin";
+import { TrackBadge } from "@/components/admin/TrackBadge";
+import { AdminTrackFilter } from "@/components/admin/AdminTrackFilter";
+import { loadAdminFlashcardDecks, loadExamTracks } from "@/lib/admin/loaders";
 
-export default function FlashcardStudioPage() {
-  const decksWithCards = MOCK_FLASHCARD_DECKS.map((deck) => ({
-    ...deck,
-    cards: MOCK_FLASHCARDS.filter((c) => c.deckId === deck.id),
-    adminCards: MOCK_FLASHCARDS_ADMIN.filter((c) => c.deckId === deck.id),
-  }));
+type Props = { searchParams: Promise<{ trackId?: string }> };
+
+export default async function FlashcardStudioPage({ searchParams }: Props) {
+  const { trackId } = await searchParams;
+  const [decks, tracks] = await Promise.all([
+    loadAdminFlashcardDecks(trackId || null),
+    loadExamTracks(),
+  ]);
 
   return (
     <div className="p-6 lg:p-8 space-y-8">
-      <h1 className="font-heading text-2xl font-bold text-slate-900 dark:text-white">
-        Flashcard Studio
-      </h1>
-      <p className="text-slate-600 dark:text-slate-400">
-        Create and manage flashcard decks. Cards support workflow statuses.
-      </p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="font-heading text-2xl font-bold text-slate-900 dark:text-white">
+            Flashcard Studio
+          </h1>
+          <p className="text-slate-600 dark:text-slate-400 mt-1">
+            Create and manage flashcard decks. Every deck must be assigned to a track.
+          </p>
+        </div>
+        <div className="flex items-center gap-4">
+          <AdminTrackFilter tracks={tracks} selectedTrackId={trackId} />
+          <Link
+            href="/admin/flashcards/new"
+            className="px-4 py-2 rounded-lg bg-indigo-600 text-white font-medium hover:bg-indigo-700 shrink-0"
+          >
+            + New Deck
+          </Link>
+        </div>
+      </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {decksWithCards.map((deck) => {
-          const system = MOCK_SYSTEMS.find((s) => s.id === deck.systemId);
-          return (
+        {decks.length === 0 ? (
+          <div className="col-span-2 p-8 text-center text-slate-500 rounded-xl border border-dashed border-slate-300 dark:border-slate-600">
+            No flashcard decks found. {trackId ? "Try a different track filter." : "Create your first deck."}
+          </div>
+        ) : (
+          decks.map((deck) => (
             <Card key={deck.id}>
               <div className="flex items-start justify-between">
                 <div>
                   <h2 className="font-heading font-semibold text-slate-900 dark:text-white">
                     {deck.name}
                   </h2>
-                  <p className="text-sm text-slate-500 mt-1">
-                    {system?.name ?? "General"} · {deck.cards.length} cards
+                  <p className="text-sm text-slate-500 mt-1 flex items-center gap-2">
+                    {deck.systemName ?? "General"} · {deck.cardCount} cards · <TrackBadge slug={deck.examTrackSlug} />
                   </p>
-                  <div className="mt-4 flex flex-wrap gap-1">
-                    {deck.adminCards.slice(0, 3).map((c) => (
-                      <StatusBadge key={c.id} status={c.status as WorkflowStatus} />
-                    ))}
-                  </div>
+                  <p className="text-xs text-slate-400 mt-1">Source: {deck.source}</p>
                 </div>
                 <Link
                   href={`/admin/flashcards/${deck.id}`}
@@ -49,8 +61,8 @@ export default function FlashcardStudioPage() {
                 </Link>
               </div>
             </Card>
-          );
-        })}
+          ))
+        )}
       </div>
     </div>
   );

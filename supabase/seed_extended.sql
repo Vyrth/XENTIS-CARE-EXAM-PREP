@@ -3,6 +3,10 @@
 -- =============================================================================
 -- Run after base seed. Use: supabase db reset (runs seed.sql which sources this)
 -- Or run manually: psql -f supabase/seed_extended.sql
+--
+-- ENUM CAST: exam_tracks.slug is type exam_track_slug (enum). When joining or
+-- filtering by track, cast string literals: 'lvn'::exam_track_slug. Otherwise
+-- PostgreSQL errors: "operator does not exist: exam_track_slug = text".
 -- =============================================================================
 
 -- -----------------------------------------------------------------------------
@@ -20,62 +24,226 @@ ON CONFLICT (slug) DO NOTHING;
 -- -----------------------------------------------------------------------------
 INSERT INTO systems (exam_track_id, slug, name, description, display_order)
 SELECT et.id, 'cardiovascular', 'Cardiovascular', 'Heart, circulation, ECG', 1
-FROM exam_tracks et WHERE et.slug = 'lvn'
+FROM exam_tracks et WHERE et.slug = 'lvn'::exam_track_slug
 ON CONFLICT (exam_track_id, slug) DO NOTHING;
 
 INSERT INTO systems (exam_track_id, slug, name, description, display_order)
 SELECT et.id, 'respiratory', 'Respiratory', 'Lungs, oxygenation', 2
-FROM exam_tracks et WHERE et.slug = 'lvn'
+FROM exam_tracks et WHERE et.slug = 'lvn'::exam_track_slug
 ON CONFLICT (exam_track_id, slug) DO NOTHING;
 
 INSERT INTO systems (exam_track_id, slug, name, description, display_order)
 SELECT et.id, 'renal', 'Renal', 'Kidneys, fluids, electrolytes', 3
-FROM exam_tracks et WHERE et.slug = 'lvn'
+FROM exam_tracks et WHERE et.slug = 'lvn'::exam_track_slug
+ON CONFLICT (exam_track_id, slug) DO NOTHING;
+
+-- LVN Mass Content Plan systems (6 categories for 800-question target)
+INSERT INTO systems (exam_track_id, slug, name, description, display_order)
+SELECT et.id, 'fundamentals', 'Fundamentals', 'ADLs, hygiene, basic nursing procedures', 4
+FROM exam_tracks et WHERE et.slug = 'lvn'::exam_track_slug
+ON CONFLICT (exam_track_id, slug) DO NOTHING;
+
+INSERT INTO systems (exam_track_id, slug, name, description, display_order)
+SELECT et.id, 'pharmacology-basics', 'Pharmacology Basics', 'Medication administration, rights, routes', 5
+FROM exam_tracks et WHERE et.slug = 'lvn'::exam_track_slug
+ON CONFLICT (exam_track_id, slug) DO NOTHING;
+
+INSERT INTO systems (exam_track_id, slug, name, description, display_order)
+SELECT et.id, 'medical-surgical', 'Medical Surgical', 'Med-surg nursing basics', 6
+FROM exam_tracks et WHERE et.slug = 'lvn'::exam_track_slug
+ON CONFLICT (exam_track_id, slug) DO NOTHING;
+
+INSERT INTO systems (exam_track_id, slug, name, description, display_order)
+SELECT et.id, 'pediatrics-basics', 'Pediatrics Basics', 'Pediatric nursing basics', 7
+FROM exam_tracks et WHERE et.slug = 'lvn'::exam_track_slug
+ON CONFLICT (exam_track_id, slug) DO NOTHING;
+
+INSERT INTO systems (exam_track_id, slug, name, description, display_order)
+SELECT et.id, 'ob-basics', 'OB Basics', 'Maternity nursing basics', 8
+FROM exam_tracks et WHERE et.slug = 'lvn'::exam_track_slug
+ON CONFLICT (exam_track_id, slug) DO NOTHING;
+
+INSERT INTO systems (exam_track_id, slug, name, description, display_order)
+SELECT et.id, 'safety-infection-control', 'Safety/Infection Control', 'Safety, infection control, delegation', 9
+FROM exam_tracks et WHERE et.slug = 'lvn'::exam_track_slug
 ON CONFLICT (exam_track_id, slug) DO NOTHING;
 
 INSERT INTO systems (exam_track_id, slug, name, description, display_order)
 SELECT et.id, 'cardiovascular', 'Cardiovascular', 'Heart, circulation, ECG', 1
-FROM exam_tracks et WHERE et.slug = 'rn'
+FROM exam_tracks et WHERE et.slug = 'rn'::exam_track_slug
 ON CONFLICT (exam_track_id, slug) DO NOTHING;
 
 INSERT INTO systems (exam_track_id, slug, name, description, display_order)
 SELECT et.id, 'respiratory', 'Respiratory', 'Lungs, oxygenation', 2
-FROM exam_tracks et WHERE et.slug = 'rn'
+FROM exam_tracks et WHERE et.slug = 'rn'::exam_track_slug
 ON CONFLICT (exam_track_id, slug) DO NOTHING;
 
 INSERT INTO systems (exam_track_id, slug, name, description, display_order)
 SELECT et.id, 'renal', 'Renal', 'Kidneys, fluids, electrolytes', 3
-FROM exam_tracks et WHERE et.slug = 'rn'
+FROM exam_tracks et WHERE et.slug = 'rn'::exam_track_slug
 ON CONFLICT (exam_track_id, slug) DO NOTHING;
 
 INSERT INTO systems (exam_track_id, slug, name, description, display_order)
 SELECT et.id, 'psychiatric', 'Psychiatric', 'Mental health, psychopharmacology', 4
-FROM exam_tracks et WHERE et.slug = 'rn'
+FROM exam_tracks et WHERE et.slug = 'rn'::exam_track_slug
+ON CONFLICT (exam_track_id, slug) DO NOTHING;
+
+-- RN Mass Content Plan systems (14 systems for 2000-question target)
+INSERT INTO systems (exam_track_id, slug, name, description, display_order)
+SELECT et.id, 'neurological', 'Neurological', 'Brain, CNS, stroke, seizures', 5
+FROM exam_tracks et WHERE et.slug = 'rn'::exam_track_slug
+ON CONFLICT (exam_track_id, slug) DO NOTHING;
+
+INSERT INTO systems (exam_track_id, slug, name, description, display_order)
+SELECT et.id, 'endocrine', 'Endocrine', 'Diabetes, thyroid, adrenal', 6
+FROM exam_tracks et WHERE et.slug = 'rn'::exam_track_slug
+ON CONFLICT (exam_track_id, slug) DO NOTHING;
+
+INSERT INTO systems (exam_track_id, slug, name, description, display_order)
+SELECT et.id, 'gastrointestinal', 'Gastrointestinal', 'GI disorders, liver, nutrition', 7
+FROM exam_tracks et WHERE et.slug = 'rn'::exam_track_slug
+ON CONFLICT (exam_track_id, slug) DO NOTHING;
+
+INSERT INTO systems (exam_track_id, slug, name, description, display_order)
+SELECT et.id, 'infectious-disease', 'Infectious Disease', 'Infection control, sepsis, antibiotics', 8
+FROM exam_tracks et WHERE et.slug = 'rn'::exam_track_slug
+ON CONFLICT (exam_track_id, slug) DO NOTHING;
+
+INSERT INTO systems (exam_track_id, slug, name, description, display_order)
+SELECT et.id, 'pharmacology', 'Pharmacology', 'Medication safety, drug classes, interactions', 9
+FROM exam_tracks et WHERE et.slug = 'rn'::exam_track_slug
+ON CONFLICT (exam_track_id, slug) DO NOTHING;
+
+INSERT INTO systems (exam_track_id, slug, name, description, display_order)
+SELECT et.id, 'pediatrics', 'Pediatrics', 'Growth, development, pediatric conditions', 10
+FROM exam_tracks et WHERE et.slug = 'rn'::exam_track_slug
+ON CONFLICT (exam_track_id, slug) DO NOTHING;
+
+INSERT INTO systems (exam_track_id, slug, name, description, display_order)
+SELECT et.id, 'ob-gyn', 'OB/GYN', 'Maternity, labor, postpartum, women''s health', 11
+FROM exam_tracks et WHERE et.slug = 'rn'::exam_track_slug
+ON CONFLICT (exam_track_id, slug) DO NOTHING;
+
+INSERT INTO systems (exam_track_id, slug, name, description, display_order)
+SELECT et.id, 'musculoskeletal', 'Musculoskeletal', 'Fractures, arthritis, mobility', 12
+FROM exam_tracks et WHERE et.slug = 'rn'::exam_track_slug
+ON CONFLICT (exam_track_id, slug) DO NOTHING;
+
+INSERT INTO systems (exam_track_id, slug, name, description, display_order)
+SELECT et.id, 'dermatology', 'Dermatology', 'Skin conditions, wounds, pressure injuries', 13
+FROM exam_tracks et WHERE et.slug = 'rn'::exam_track_slug
+ON CONFLICT (exam_track_id, slug) DO NOTHING;
+
+INSERT INTO systems (exam_track_id, slug, name, description, display_order)
+SELECT et.id, 'hematology', 'Hematology', 'Anemia, clotting, blood products', 14
+FROM exam_tracks et WHERE et.slug = 'rn'::exam_track_slug
+ON CONFLICT (exam_track_id, slug) DO NOTHING;
+
+INSERT INTO systems (exam_track_id, slug, name, description, display_order)
+SELECT et.id, 'safety-prioritization-delegation', 'Safety/Prioritization/Delegation', 'NCLEX prioritization, delegation, safety', 15
+FROM exam_tracks et WHERE et.slug = 'rn'::exam_track_slug
 ON CONFLICT (exam_track_id, slug) DO NOTHING;
 
 INSERT INTO systems (exam_track_id, slug, name, description, display_order)
 SELECT et.id, 'cardiovascular', 'Cardiovascular', 'Heart, circulation', 1
-FROM exam_tracks et WHERE et.slug = 'fnp'
+FROM exam_tracks et WHERE et.slug = 'fnp'::exam_track_slug
 ON CONFLICT (exam_track_id, slug) DO NOTHING;
 
 INSERT INTO systems (exam_track_id, slug, name, description, display_order)
 SELECT et.id, 'respiratory', 'Respiratory', 'Lungs, oxygenation', 2
-FROM exam_tracks et WHERE et.slug = 'fnp'
+FROM exam_tracks et WHERE et.slug = 'fnp'::exam_track_slug
 ON CONFLICT (exam_track_id, slug) DO NOTHING;
 
 INSERT INTO systems (exam_track_id, slug, name, description, display_order)
 SELECT et.id, 'psychiatric', 'Psychiatric', 'Mental health', 3
-FROM exam_tracks et WHERE et.slug = 'fnp'
+FROM exam_tracks et WHERE et.slug = 'fnp'::exam_track_slug
+ON CONFLICT (exam_track_id, slug) DO NOTHING;
+
+-- FNP Mass Content Plan systems (12 systems for 1500-question target)
+INSERT INTO systems (exam_track_id, slug, name, description, display_order)
+SELECT et.id, 'endocrine', 'Endocrine', 'Diabetes, thyroid, adrenal', 4
+FROM exam_tracks et WHERE et.slug = 'fnp'::exam_track_slug
+ON CONFLICT (exam_track_id, slug) DO NOTHING;
+
+INSERT INTO systems (exam_track_id, slug, name, description, display_order)
+SELECT et.id, 'gastrointestinal', 'Gastrointestinal', 'GI disorders, liver, nutrition', 5
+FROM exam_tracks et WHERE et.slug = 'fnp'::exam_track_slug
+ON CONFLICT (exam_track_id, slug) DO NOTHING;
+
+INSERT INTO systems (exam_track_id, slug, name, description, display_order)
+SELECT et.id, 'renal', 'Renal', 'Kidneys, fluids, electrolytes', 6
+FROM exam_tracks et WHERE et.slug = 'fnp'::exam_track_slug
+ON CONFLICT (exam_track_id, slug) DO NOTHING;
+
+INSERT INTO systems (exam_track_id, slug, name, description, display_order)
+SELECT et.id, 'dermatology', 'Dermatology', 'Skin conditions, wounds', 7
+FROM exam_tracks et WHERE et.slug = 'fnp'::exam_track_slug
+ON CONFLICT (exam_track_id, slug) DO NOTHING;
+
+INSERT INTO systems (exam_track_id, slug, name, description, display_order)
+SELECT et.id, 'musculoskeletal', 'Musculoskeletal', 'Fractures, arthritis, mobility', 8
+FROM exam_tracks et WHERE et.slug = 'fnp'::exam_track_slug
+ON CONFLICT (exam_track_id, slug) DO NOTHING;
+
+INSERT INTO systems (exam_track_id, slug, name, description, display_order)
+SELECT et.id, 'ob-gyn', 'OB/GYN', 'Maternity, women''s health', 9
+FROM exam_tracks et WHERE et.slug = 'fnp'::exam_track_slug
+ON CONFLICT (exam_track_id, slug) DO NOTHING;
+
+INSERT INTO systems (exam_track_id, slug, name, description, display_order)
+SELECT et.id, 'pediatrics', 'Pediatrics', 'Growth, development, pediatric conditions', 10
+FROM exam_tracks et WHERE et.slug = 'fnp'::exam_track_slug
+ON CONFLICT (exam_track_id, slug) DO NOTHING;
+
+INSERT INTO systems (exam_track_id, slug, name, description, display_order)
+SELECT et.id, 'preventive-care', 'Preventive Care', 'Screening, vaccines, wellness', 11
+FROM exam_tracks et WHERE et.slug = 'fnp'::exam_track_slug
+ON CONFLICT (exam_track_id, slug) DO NOTHING;
+
+INSERT INTO systems (exam_track_id, slug, name, description, display_order)
+SELECT et.id, 'infectious-disease', 'Infectious Disease', 'Infection control, antibiotics', 12
+FROM exam_tracks et WHERE et.slug = 'fnp'::exam_track_slug
 ON CONFLICT (exam_track_id, slug) DO NOTHING;
 
 INSERT INTO systems (exam_track_id, slug, name, description, display_order)
 SELECT et.id, 'psychiatric', 'Psychiatric', 'Mental health, psychopharmacology', 1
-FROM exam_tracks et WHERE et.slug = 'pmhnp'
+FROM exam_tracks et WHERE et.slug = 'pmhnp'::exam_track_slug
 ON CONFLICT (exam_track_id, slug) DO NOTHING;
 
 INSERT INTO systems (exam_track_id, slug, name, description, display_order)
 SELECT et.id, 'neurological', 'Neurological', 'Brain, CNS', 2
-FROM exam_tracks et WHERE et.slug = 'pmhnp'
+FROM exam_tracks et WHERE et.slug = 'pmhnp'::exam_track_slug
+ON CONFLICT (exam_track_id, slug) DO NOTHING;
+
+-- PMHNP Mass Content Plan systems (7 categories for 1000-question target)
+INSERT INTO systems (exam_track_id, slug, name, description, display_order)
+SELECT et.id, 'psychopharmacology', 'Psychopharmacology', 'Medication mechanisms, dosing, interactions', 3
+FROM exam_tracks et WHERE et.slug = 'pmhnp'::exam_track_slug
+ON CONFLICT (exam_track_id, slug) DO NOTHING;
+
+INSERT INTO systems (exam_track_id, slug, name, description, display_order)
+SELECT et.id, 'therapy-modalities', 'Therapy Modalities', 'CBT, DBT, IPT, psychodynamic', 4
+FROM exam_tracks et WHERE et.slug = 'pmhnp'::exam_track_slug
+ON CONFLICT (exam_track_id, slug) DO NOTHING;
+
+INSERT INTO systems (exam_track_id, slug, name, description, display_order)
+SELECT et.id, 'substance-use', 'Substance Use', 'Addiction, withdrawal, MAT', 5
+FROM exam_tracks et WHERE et.slug = 'pmhnp'::exam_track_slug
+ON CONFLICT (exam_track_id, slug) DO NOTHING;
+
+INSERT INTO systems (exam_track_id, slug, name, description, display_order)
+SELECT et.id, 'child-adolescent-psychiatry', 'Child & Adolescent Psychiatry', 'Developmental, pediatric mental health', 6
+FROM exam_tracks et WHERE et.slug = 'pmhnp'::exam_track_slug
+ON CONFLICT (exam_track_id, slug) DO NOTHING;
+
+INSERT INTO systems (exam_track_id, slug, name, description, display_order)
+SELECT et.id, 'sleep-disorders', 'Sleep Disorders', 'Insomnia, sleep apnea, parasomnias', 7
+FROM exam_tracks et WHERE et.slug = 'pmhnp'::exam_track_slug
+ON CONFLICT (exam_track_id, slug) DO NOTHING;
+
+INSERT INTO systems (exam_track_id, slug, name, description, display_order)
+SELECT et.id, 'crisis-management', 'Crisis Management', 'Suicidality, violence, agitation, emergencies', 8
+FROM exam_tracks et WHERE et.slug = 'pmhnp'::exam_track_slug
 ON CONFLICT (exam_track_id, slug) DO NOTHING;
 
 -- -----------------------------------------------------------------------------
@@ -106,6 +274,119 @@ SELECT d.id, 'depression', 'Depression', 'MDD, assessment, treatment', 5
 FROM domains d WHERE d.slug = 'psychosocial'
 ON CONFLICT (domain_id, slug) DO NOTHING;
 
+-- RN Mass Content Plan topics (for new systems)
+INSERT INTO topics (domain_id, slug, name, description, display_order)
+SELECT d.id, 'stroke', 'Stroke', 'Ischemic, hemorrhagic, TIA', 6
+FROM domains d WHERE d.slug = 'safe-care'
+ON CONFLICT (domain_id, slug) DO NOTHING;
+
+INSERT INTO topics (domain_id, slug, name, description, display_order)
+SELECT d.id, 'diabetes', 'Diabetes', 'Type 1, Type 2, DKA, hypoglycemia', 6
+FROM domains d WHERE d.slug = 'physiological'
+ON CONFLICT (domain_id, slug) DO NOTHING;
+
+INSERT INTO topics (domain_id, slug, name, description, display_order)
+SELECT d.id, 'gi-disorders', 'GI Disorders', 'GI bleed, pancreatitis, liver', 7
+FROM domains d WHERE d.slug = 'physiological'
+ON CONFLICT (domain_id, slug) DO NOTHING;
+
+INSERT INTO topics (domain_id, slug, name, description, display_order)
+SELECT d.id, 'sepsis', 'Sepsis', 'SIRS, septic shock, antibiotics', 8
+FROM domains d WHERE d.slug = 'safe-care'
+ON CONFLICT (domain_id, slug) DO NOTHING;
+
+INSERT INTO topics (domain_id, slug, name, description, display_order)
+SELECT d.id, 'medication-safety', 'Medication Safety', 'Right drug, dose, route, patient', 9
+FROM domains d WHERE d.slug = 'safe-care'
+ON CONFLICT (domain_id, slug) DO NOTHING;
+
+INSERT INTO topics (domain_id, slug, name, description, display_order)
+SELECT d.id, 'pediatric-growth', 'Pediatric Growth', 'Development, milestones, vaccines', 7
+FROM domains d WHERE d.slug = 'health-promo'
+ON CONFLICT (domain_id, slug) DO NOTHING;
+
+INSERT INTO topics (domain_id, slug, name, description, display_order)
+SELECT d.id, 'labor-delivery', 'Labor and Delivery', 'Stages, fetal monitoring, complications', 8
+FROM domains d WHERE d.slug = 'physiological'
+ON CONFLICT (domain_id, slug) DO NOTHING;
+
+INSERT INTO topics (domain_id, slug, name, description, display_order)
+SELECT d.id, 'fractures', 'Fractures', 'Types, casting, traction', 9
+FROM domains d WHERE d.slug = 'physiological'
+ON CONFLICT (domain_id, slug) DO NOTHING;
+
+INSERT INTO topics (domain_id, slug, name, description, display_order)
+SELECT d.id, 'wound-care', 'Wound Care', 'Pressure injuries, healing', 10
+FROM domains d WHERE d.slug = 'physiological'
+ON CONFLICT (domain_id, slug) DO NOTHING;
+
+INSERT INTO topics (domain_id, slug, name, description, display_order)
+SELECT d.id, 'anemia', 'Anemia', 'Iron, B12, sickle cell', 10
+FROM domains d WHERE d.slug = 'physiological'
+ON CONFLICT (domain_id, slug) DO NOTHING;
+
+INSERT INTO topics (domain_id, slug, name, description, display_order)
+SELECT d.id, 'prioritization', 'Prioritization', 'Maslow, ABCs, delegation', 11
+FROM domains d WHERE d.slug = 'safe-care'
+ON CONFLICT (domain_id, slug) DO NOTHING;
+
+INSERT INTO topics (domain_id, slug, name, description, display_order)
+SELECT d.id, 'screening-prevention', 'Screening and Prevention', 'USPSTF, vaccines, wellness', 8
+FROM domains d WHERE d.slug = 'health-promo'
+ON CONFLICT (domain_id, slug) DO NOTHING;
+
+-- PMHNP Mass Content Plan topics
+INSERT INTO topics (domain_id, slug, name, description, display_order)
+SELECT d.id, 'psychopharmacology', 'Psychopharmacology', 'Antidepressants, antipsychotics, mood stabilizers', 6
+FROM domains d WHERE d.slug = 'psychosocial'
+ON CONFLICT (domain_id, slug) DO NOTHING;
+
+INSERT INTO topics (domain_id, slug, name, description, display_order)
+SELECT d.id, 'therapy-modalities', 'Therapy Modalities', 'CBT, DBT, IPT, psychodynamic', 7
+FROM domains d WHERE d.slug = 'psychosocial'
+ON CONFLICT (domain_id, slug) DO NOTHING;
+
+INSERT INTO topics (domain_id, slug, name, description, display_order)
+SELECT d.id, 'substance-use-disorders', 'Substance Use Disorders', 'Addiction, withdrawal, MAT', 8
+FROM domains d WHERE d.slug = 'psychosocial'
+ON CONFLICT (domain_id, slug) DO NOTHING;
+
+INSERT INTO topics (domain_id, slug, name, description, display_order)
+SELECT d.id, 'child-adolescent-psych', 'Child & Adolescent Psychiatry', 'Developmental disorders, pediatric MH', 9
+FROM domains d WHERE d.slug = 'psychosocial'
+ON CONFLICT (domain_id, slug) DO NOTHING;
+
+INSERT INTO topics (domain_id, slug, name, description, display_order)
+SELECT d.id, 'sleep-disorders', 'Sleep Disorders', 'Insomnia, sleep apnea, parasomnias', 10
+FROM domains d WHERE d.slug = 'psychosocial'
+ON CONFLICT (domain_id, slug) DO NOTHING;
+
+INSERT INTO topics (domain_id, slug, name, description, display_order)
+SELECT d.id, 'crisis-intervention', 'Crisis Intervention', 'Suicidality, violence, agitation', 11
+FROM domains d WHERE d.slug = 'psychosocial'
+ON CONFLICT (domain_id, slug) DO NOTHING;
+
+-- LVN Mass Content Plan topics
+INSERT INTO topics (domain_id, slug, name, description, display_order)
+SELECT d.id, 'lvn-fundamentals', 'LVN Fundamentals', 'ADLs, hygiene, basic procedures', 12
+FROM domains d WHERE d.slug = 'safe-care'
+ON CONFLICT (domain_id, slug) DO NOTHING;
+
+INSERT INTO topics (domain_id, slug, name, description, display_order)
+SELECT d.id, 'lvn-medication-admin', 'LVN Medication Administration', 'Rights, routes, documentation', 13
+FROM domains d WHERE d.slug = 'safe-care'
+ON CONFLICT (domain_id, slug) DO NOTHING;
+
+INSERT INTO topics (domain_id, slug, name, description, display_order)
+SELECT d.id, 'lvn-delegation', 'LVN Delegation', 'Scope of practice, delegation', 14
+FROM domains d WHERE d.slug = 'safe-care'
+ON CONFLICT (domain_id, slug) DO NOTHING;
+
+INSERT INTO topics (domain_id, slug, name, description, display_order)
+SELECT d.id, 'lvn-infection-control', 'LVN Infection Control', 'Hand hygiene, isolation, PPE', 15
+FROM domains d WHERE d.slug = 'safe-care'
+ON CONFLICT (domain_id, slug) DO NOTHING;
+
 -- -----------------------------------------------------------------------------
 -- subtopics (per topic)
 -- -----------------------------------------------------------------------------
@@ -133,7 +414,7 @@ FROM topics t
 JOIN domains d ON t.domain_id = d.id
 CROSS JOIN systems s
 JOIN exam_tracks et ON s.exam_track_id = et.id
-WHERE d.slug = 'safe-care' AND t.slug = 'heart-failure' AND s.slug = 'cardiovascular' AND et.slug = 'rn'
+WHERE d.slug = 'safe-care' AND t.slug = 'heart-failure' AND s.slug = 'cardiovascular' AND et.slug = 'rn'::exam_track_slug
 ON CONFLICT (topic_id, system_id) DO NOTHING;
 
 INSERT INTO topic_system_links (topic_id, system_id, display_order)
@@ -142,7 +423,313 @@ FROM topics t
 JOIN domains d ON t.domain_id = d.id
 CROSS JOIN systems s
 JOIN exam_tracks et ON s.exam_track_id = et.id
-WHERE d.slug = 'safe-care' AND t.slug = 'copd' AND s.slug = 'respiratory' AND et.slug = 'rn'
+WHERE d.slug = 'safe-care' AND t.slug = 'copd' AND s.slug = 'respiratory' AND et.slug = 'rn'::exam_track_slug
+ON CONFLICT (topic_id, system_id) DO NOTHING;
+
+-- RN Mass Content Plan: link new topics to new systems
+INSERT INTO topic_system_links (topic_id, system_id, display_order)
+SELECT t.id, s.id, 1
+FROM topics t JOIN domains d ON t.domain_id = d.id
+CROSS JOIN systems s JOIN exam_tracks et ON s.exam_track_id = et.id
+WHERE d.slug = 'safe-care' AND t.slug = 'stroke' AND s.slug = 'neurological' AND et.slug = 'rn'::exam_track_slug
+ON CONFLICT (topic_id, system_id) DO NOTHING;
+
+INSERT INTO topic_system_links (topic_id, system_id, display_order)
+SELECT t.id, s.id, 1
+FROM topics t JOIN domains d ON t.domain_id = d.id
+CROSS JOIN systems s JOIN exam_tracks et ON s.exam_track_id = et.id
+WHERE d.slug = 'physiological' AND t.slug = 'diabetes' AND s.slug = 'endocrine' AND et.slug = 'rn'::exam_track_slug
+ON CONFLICT (topic_id, system_id) DO NOTHING;
+
+INSERT INTO topic_system_links (topic_id, system_id, display_order)
+SELECT t.id, s.id, 1
+FROM topics t JOIN domains d ON t.domain_id = d.id
+CROSS JOIN systems s JOIN exam_tracks et ON s.exam_track_id = et.id
+WHERE d.slug = 'physiological' AND t.slug = 'gi-disorders' AND s.slug = 'gastrointestinal' AND et.slug = 'rn'::exam_track_slug
+ON CONFLICT (topic_id, system_id) DO NOTHING;
+
+INSERT INTO topic_system_links (topic_id, system_id, display_order)
+SELECT t.id, s.id, 1
+FROM topics t JOIN domains d ON t.domain_id = d.id
+CROSS JOIN systems s JOIN exam_tracks et ON s.exam_track_id = et.id
+WHERE d.slug = 'safe-care' AND t.slug = 'sepsis' AND s.slug = 'infectious-disease' AND et.slug = 'rn'::exam_track_slug
+ON CONFLICT (topic_id, system_id) DO NOTHING;
+
+INSERT INTO topic_system_links (topic_id, system_id, display_order)
+SELECT t.id, s.id, 1
+FROM topics t JOIN domains d ON t.domain_id = d.id
+CROSS JOIN systems s JOIN exam_tracks et ON s.exam_track_id = et.id
+WHERE d.slug = 'safe-care' AND t.slug = 'medication-safety' AND s.slug = 'pharmacology' AND et.slug = 'rn'::exam_track_slug
+ON CONFLICT (topic_id, system_id) DO NOTHING;
+
+INSERT INTO topic_system_links (topic_id, system_id, display_order)
+SELECT t.id, s.id, 1
+FROM topics t JOIN domains d ON t.domain_id = d.id
+CROSS JOIN systems s JOIN exam_tracks et ON s.exam_track_id = et.id
+WHERE d.slug = 'health-promo' AND t.slug = 'pediatric-growth' AND s.slug = 'pediatrics' AND et.slug = 'rn'::exam_track_slug
+ON CONFLICT (topic_id, system_id) DO NOTHING;
+
+INSERT INTO topic_system_links (topic_id, system_id, display_order)
+SELECT t.id, s.id, 1
+FROM topics t JOIN domains d ON t.domain_id = d.id
+CROSS JOIN systems s JOIN exam_tracks et ON s.exam_track_id = et.id
+WHERE d.slug = 'physiological' AND t.slug = 'labor-delivery' AND s.slug = 'ob-gyn' AND et.slug = 'rn'::exam_track_slug
+ON CONFLICT (topic_id, system_id) DO NOTHING;
+
+INSERT INTO topic_system_links (topic_id, system_id, display_order)
+SELECT t.id, s.id, 1
+FROM topics t JOIN domains d ON t.domain_id = d.id
+CROSS JOIN systems s JOIN exam_tracks et ON s.exam_track_id = et.id
+WHERE d.slug = 'physiological' AND t.slug = 'fractures' AND s.slug = 'musculoskeletal' AND et.slug = 'rn'::exam_track_slug
+ON CONFLICT (topic_id, system_id) DO NOTHING;
+
+INSERT INTO topic_system_links (topic_id, system_id, display_order)
+SELECT t.id, s.id, 1
+FROM topics t JOIN domains d ON t.domain_id = d.id
+CROSS JOIN systems s JOIN exam_tracks et ON s.exam_track_id = et.id
+WHERE d.slug = 'physiological' AND t.slug = 'wound-care' AND s.slug = 'dermatology' AND et.slug = 'rn'::exam_track_slug
+ON CONFLICT (topic_id, system_id) DO NOTHING;
+
+INSERT INTO topic_system_links (topic_id, system_id, display_order)
+SELECT t.id, s.id, 1
+FROM topics t JOIN domains d ON t.domain_id = d.id
+CROSS JOIN systems s JOIN exam_tracks et ON s.exam_track_id = et.id
+WHERE d.slug = 'physiological' AND t.slug = 'anemia' AND s.slug = 'hematology' AND et.slug = 'rn'::exam_track_slug
+ON CONFLICT (topic_id, system_id) DO NOTHING;
+
+INSERT INTO topic_system_links (topic_id, system_id, display_order)
+SELECT t.id, s.id, 1
+FROM topics t JOIN domains d ON t.domain_id = d.id
+CROSS JOIN systems s JOIN exam_tracks et ON s.exam_track_id = et.id
+WHERE d.slug = 'safe-care' AND t.slug = 'prioritization' AND s.slug = 'safety-prioritization-delegation' AND et.slug = 'rn'::exam_track_slug
+ON CONFLICT (topic_id, system_id) DO NOTHING;
+
+-- Link heart-failure, arrhythmias to cardiovascular; aki to renal (RN)
+INSERT INTO topic_system_links (topic_id, system_id, display_order)
+SELECT t.id, s.id, 1
+FROM topics t JOIN domains d ON t.domain_id = d.id
+CROSS JOIN systems s JOIN exam_tracks et ON s.exam_track_id = et.id
+WHERE d.slug = 'safe-care' AND t.slug = 'arrhythmias' AND s.slug = 'cardiovascular' AND et.slug = 'rn'::exam_track_slug
+ON CONFLICT (topic_id, system_id) DO NOTHING;
+
+INSERT INTO topic_system_links (topic_id, system_id, display_order)
+SELECT t.id, s.id, 1
+FROM topics t JOIN domains d ON t.domain_id = d.id
+CROSS JOIN systems s JOIN exam_tracks et ON s.exam_track_id = et.id
+WHERE d.slug = 'safe-care' AND t.slug = 'aki' AND s.slug = 'renal' AND et.slug = 'rn'::exam_track_slug
+ON CONFLICT (topic_id, system_id) DO NOTHING;
+
+-- FNP Mass Content Plan: link topics to FNP systems (topic diversity)
+INSERT INTO topic_system_links (topic_id, system_id, display_order)
+SELECT t.id, s.id, 1
+FROM topics t JOIN domains d ON t.domain_id = d.id
+CROSS JOIN systems s JOIN exam_tracks et ON s.exam_track_id = et.id
+WHERE d.slug = 'safe-care' AND t.slug = 'heart-failure' AND s.slug = 'cardiovascular' AND et.slug = 'fnp'::exam_track_slug
+ON CONFLICT (topic_id, system_id) DO NOTHING;
+
+INSERT INTO topic_system_links (topic_id, system_id, display_order)
+SELECT t.id, s.id, 1
+FROM topics t JOIN domains d ON t.domain_id = d.id
+CROSS JOIN systems s JOIN exam_tracks et ON s.exam_track_id = et.id
+WHERE d.slug = 'safe-care' AND t.slug = 'arrhythmias' AND s.slug = 'cardiovascular' AND et.slug = 'fnp'::exam_track_slug
+ON CONFLICT (topic_id, system_id) DO NOTHING;
+
+INSERT INTO topic_system_links (topic_id, system_id, display_order)
+SELECT t.id, s.id, 1
+FROM topics t JOIN domains d ON t.domain_id = d.id
+CROSS JOIN systems s JOIN exam_tracks et ON s.exam_track_id = et.id
+WHERE d.slug = 'physiological' AND t.slug = 'diabetes' AND s.slug = 'endocrine' AND et.slug = 'fnp'::exam_track_slug
+ON CONFLICT (topic_id, system_id) DO NOTHING;
+
+INSERT INTO topic_system_links (topic_id, system_id, display_order)
+SELECT t.id, s.id, 1
+FROM topics t JOIN domains d ON t.domain_id = d.id
+CROSS JOIN systems s JOIN exam_tracks et ON s.exam_track_id = et.id
+WHERE d.slug = 'safe-care' AND t.slug = 'copd' AND s.slug = 'respiratory' AND et.slug = 'fnp'::exam_track_slug
+ON CONFLICT (topic_id, system_id) DO NOTHING;
+
+INSERT INTO topic_system_links (topic_id, system_id, display_order)
+SELECT t.id, s.id, 1
+FROM topics t JOIN domains d ON t.domain_id = d.id
+CROSS JOIN systems s JOIN exam_tracks et ON s.exam_track_id = et.id
+WHERE d.slug = 'physiological' AND t.slug = 'gi-disorders' AND s.slug = 'gastrointestinal' AND et.slug = 'fnp'::exam_track_slug
+ON CONFLICT (topic_id, system_id) DO NOTHING;
+
+INSERT INTO topic_system_links (topic_id, system_id, display_order)
+SELECT t.id, s.id, 1
+FROM topics t JOIN domains d ON t.domain_id = d.id
+CROSS JOIN systems s JOIN exam_tracks et ON s.exam_track_id = et.id
+WHERE d.slug = 'safe-care' AND t.slug = 'aki' AND s.slug = 'renal' AND et.slug = 'fnp'::exam_track_slug
+ON CONFLICT (topic_id, system_id) DO NOTHING;
+
+INSERT INTO topic_system_links (topic_id, system_id, display_order)
+SELECT t.id, s.id, 1
+FROM topics t JOIN domains d ON t.domain_id = d.id
+CROSS JOIN systems s JOIN exam_tracks et ON s.exam_track_id = et.id
+WHERE d.slug = 'physiological' AND t.slug = 'wound-care' AND s.slug = 'dermatology' AND et.slug = 'fnp'::exam_track_slug
+ON CONFLICT (topic_id, system_id) DO NOTHING;
+
+INSERT INTO topic_system_links (topic_id, system_id, display_order)
+SELECT t.id, s.id, 1
+FROM topics t JOIN domains d ON t.domain_id = d.id
+CROSS JOIN systems s JOIN exam_tracks et ON s.exam_track_id = et.id
+WHERE d.slug = 'physiological' AND t.slug = 'fractures' AND s.slug = 'musculoskeletal' AND et.slug = 'fnp'::exam_track_slug
+ON CONFLICT (topic_id, system_id) DO NOTHING;
+
+INSERT INTO topic_system_links (topic_id, system_id, display_order)
+SELECT t.id, s.id, 1
+FROM topics t JOIN domains d ON t.domain_id = d.id
+CROSS JOIN systems s JOIN exam_tracks et ON s.exam_track_id = et.id
+WHERE d.slug = 'physiological' AND t.slug = 'labor-delivery' AND s.slug = 'ob-gyn' AND et.slug = 'fnp'::exam_track_slug
+ON CONFLICT (topic_id, system_id) DO NOTHING;
+
+INSERT INTO topic_system_links (topic_id, system_id, display_order)
+SELECT t.id, s.id, 1
+FROM topics t JOIN domains d ON t.domain_id = d.id
+CROSS JOIN systems s JOIN exam_tracks et ON s.exam_track_id = et.id
+WHERE d.slug = 'health-promo' AND t.slug = 'pediatric-growth' AND s.slug = 'pediatrics' AND et.slug = 'fnp'::exam_track_slug
+ON CONFLICT (topic_id, system_id) DO NOTHING;
+
+INSERT INTO topic_system_links (topic_id, system_id, display_order)
+SELECT t.id, s.id, 1
+FROM topics t JOIN domains d ON t.domain_id = d.id
+CROSS JOIN systems s JOIN exam_tracks et ON s.exam_track_id = et.id
+WHERE d.slug = 'psychosocial' AND t.slug = 'depression' AND s.slug = 'psychiatric' AND et.slug = 'fnp'::exam_track_slug
+ON CONFLICT (topic_id, system_id) DO NOTHING;
+
+INSERT INTO topic_system_links (topic_id, system_id, display_order)
+SELECT t.id, s.id, 1
+FROM topics t JOIN domains d ON t.domain_id = d.id
+CROSS JOIN systems s JOIN exam_tracks et ON s.exam_track_id = et.id
+WHERE d.slug = 'health-promo' AND t.slug = 'screening-prevention' AND s.slug = 'preventive-care' AND et.slug = 'fnp'::exam_track_slug
+ON CONFLICT (topic_id, system_id) DO NOTHING;
+
+INSERT INTO topic_system_links (topic_id, system_id, display_order)
+SELECT t.id, s.id, 1
+FROM topics t JOIN domains d ON t.domain_id = d.id
+CROSS JOIN systems s JOIN exam_tracks et ON s.exam_track_id = et.id
+WHERE d.slug = 'safe-care' AND t.slug = 'sepsis' AND s.slug = 'infectious-disease' AND et.slug = 'fnp'::exam_track_slug
+ON CONFLICT (topic_id, system_id) DO NOTHING;
+
+-- PMHNP Mass Content Plan: link topics to PMHNP systems
+INSERT INTO topic_system_links (topic_id, system_id, display_order)
+SELECT t.id, s.id, 1
+FROM topics t JOIN domains d ON t.domain_id = d.id
+CROSS JOIN systems s JOIN exam_tracks et ON s.exam_track_id = et.id
+WHERE d.slug = 'psychosocial' AND t.slug = 'depression' AND s.slug = 'psychiatric' AND et.slug = 'pmhnp'::exam_track_slug
+ON CONFLICT (topic_id, system_id) DO NOTHING;
+
+INSERT INTO topic_system_links (topic_id, system_id, display_order)
+SELECT t.id, s.id, 1
+FROM topics t JOIN domains d ON t.domain_id = d.id
+CROSS JOIN systems s JOIN exam_tracks et ON s.exam_track_id = et.id
+WHERE d.slug = 'psychosocial' AND t.slug = 'psychopharmacology' AND s.slug = 'psychopharmacology' AND et.slug = 'pmhnp'::exam_track_slug
+ON CONFLICT (topic_id, system_id) DO NOTHING;
+
+INSERT INTO topic_system_links (topic_id, system_id, display_order)
+SELECT t.id, s.id, 1
+FROM topics t JOIN domains d ON t.domain_id = d.id
+CROSS JOIN systems s JOIN exam_tracks et ON s.exam_track_id = et.id
+WHERE d.slug = 'psychosocial' AND t.slug = 'therapy-modalities' AND s.slug = 'therapy-modalities' AND et.slug = 'pmhnp'::exam_track_slug
+ON CONFLICT (topic_id, system_id) DO NOTHING;
+
+INSERT INTO topic_system_links (topic_id, system_id, display_order)
+SELECT t.id, s.id, 1
+FROM topics t JOIN domains d ON t.domain_id = d.id
+CROSS JOIN systems s JOIN exam_tracks et ON s.exam_track_id = et.id
+WHERE d.slug = 'psychosocial' AND t.slug = 'substance-use-disorders' AND s.slug = 'substance-use' AND et.slug = 'pmhnp'::exam_track_slug
+ON CONFLICT (topic_id, system_id) DO NOTHING;
+
+INSERT INTO topic_system_links (topic_id, system_id, display_order)
+SELECT t.id, s.id, 1
+FROM topics t JOIN domains d ON t.domain_id = d.id
+CROSS JOIN systems s JOIN exam_tracks et ON s.exam_track_id = et.id
+WHERE d.slug = 'psychosocial' AND t.slug = 'child-adolescent-psych' AND s.slug = 'child-adolescent-psychiatry' AND et.slug = 'pmhnp'::exam_track_slug
+ON CONFLICT (topic_id, system_id) DO NOTHING;
+
+INSERT INTO topic_system_links (topic_id, system_id, display_order)
+SELECT t.id, s.id, 1
+FROM topics t JOIN domains d ON t.domain_id = d.id
+CROSS JOIN systems s JOIN exam_tracks et ON s.exam_track_id = et.id
+WHERE d.slug = 'psychosocial' AND t.slug = 'sleep-disorders' AND s.slug = 'sleep-disorders' AND et.slug = 'pmhnp'::exam_track_slug
+ON CONFLICT (topic_id, system_id) DO NOTHING;
+
+INSERT INTO topic_system_links (topic_id, system_id, display_order)
+SELECT t.id, s.id, 1
+FROM topics t JOIN domains d ON t.domain_id = d.id
+CROSS JOIN systems s JOIN exam_tracks et ON s.exam_track_id = et.id
+WHERE d.slug = 'psychosocial' AND t.slug = 'crisis-intervention' AND s.slug = 'crisis-management' AND et.slug = 'pmhnp'::exam_track_slug
+ON CONFLICT (topic_id, system_id) DO NOTHING;
+
+-- LVN Mass Content Plan: link topics to LVN systems
+INSERT INTO topic_system_links (topic_id, system_id, display_order)
+SELECT t.id, s.id, 1
+FROM topics t JOIN domains d ON t.domain_id = d.id
+CROSS JOIN systems s JOIN exam_tracks et ON s.exam_track_id = et.id
+WHERE d.slug = 'safe-care' AND t.slug = 'lvn-fundamentals' AND s.slug = 'fundamentals' AND et.slug = 'lvn'::exam_track_slug
+ON CONFLICT (topic_id, system_id) DO NOTHING;
+
+INSERT INTO topic_system_links (topic_id, system_id, display_order)
+SELECT t.id, s.id, 1
+FROM topics t JOIN domains d ON t.domain_id = d.id
+CROSS JOIN systems s JOIN exam_tracks et ON s.exam_track_id = et.id
+WHERE d.slug = 'safe-care' AND t.slug = 'lvn-medication-admin' AND s.slug = 'pharmacology-basics' AND et.slug = 'lvn'::exam_track_slug
+ON CONFLICT (topic_id, system_id) DO NOTHING;
+
+INSERT INTO topic_system_links (topic_id, system_id, display_order)
+SELECT t.id, s.id, 1
+FROM topics t JOIN domains d ON t.domain_id = d.id
+CROSS JOIN systems s JOIN exam_tracks et ON s.exam_track_id = et.id
+WHERE d.slug = 'safe-care' AND t.slug = 'heart-failure' AND s.slug = 'medical-surgical' AND et.slug = 'lvn'::exam_track_slug
+ON CONFLICT (topic_id, system_id) DO NOTHING;
+
+INSERT INTO topic_system_links (topic_id, system_id, display_order)
+SELECT t.id, s.id, 1
+FROM topics t JOIN domains d ON t.domain_id = d.id
+CROSS JOIN systems s JOIN exam_tracks et ON s.exam_track_id = et.id
+WHERE d.slug = 'safe-care' AND t.slug = 'copd' AND s.slug = 'medical-surgical' AND et.slug = 'lvn'::exam_track_slug
+ON CONFLICT (topic_id, system_id) DO NOTHING;
+
+INSERT INTO topic_system_links (topic_id, system_id, display_order)
+SELECT t.id, s.id, 1
+FROM topics t JOIN domains d ON t.domain_id = d.id
+CROSS JOIN systems s JOIN exam_tracks et ON s.exam_track_id = et.id
+WHERE d.slug = 'safe-care' AND t.slug = 'aki' AND s.slug = 'medical-surgical' AND et.slug = 'lvn'::exam_track_slug
+ON CONFLICT (topic_id, system_id) DO NOTHING;
+
+INSERT INTO topic_system_links (topic_id, system_id, display_order)
+SELECT t.id, s.id, 1
+FROM topics t JOIN domains d ON t.domain_id = d.id
+CROSS JOIN systems s JOIN exam_tracks et ON s.exam_track_id = et.id
+WHERE d.slug = 'health-promo' AND t.slug = 'pediatric-growth' AND s.slug = 'pediatrics-basics' AND et.slug = 'lvn'::exam_track_slug
+ON CONFLICT (topic_id, system_id) DO NOTHING;
+
+INSERT INTO topic_system_links (topic_id, system_id, display_order)
+SELECT t.id, s.id, 1
+FROM topics t JOIN domains d ON t.domain_id = d.id
+CROSS JOIN systems s JOIN exam_tracks et ON s.exam_track_id = et.id
+WHERE d.slug = 'physiological' AND t.slug = 'labor-delivery' AND s.slug = 'ob-basics' AND et.slug = 'lvn'::exam_track_slug
+ON CONFLICT (topic_id, system_id) DO NOTHING;
+
+INSERT INTO topic_system_links (topic_id, system_id, display_order)
+SELECT t.id, s.id, 1
+FROM topics t JOIN domains d ON t.domain_id = d.id
+CROSS JOIN systems s JOIN exam_tracks et ON s.exam_track_id = et.id
+WHERE d.slug = 'safe-care' AND t.slug = 'lvn-delegation' AND s.slug = 'safety-infection-control' AND et.slug = 'lvn'::exam_track_slug
+ON CONFLICT (topic_id, system_id) DO NOTHING;
+
+INSERT INTO topic_system_links (topic_id, system_id, display_order)
+SELECT t.id, s.id, 1
+FROM topics t JOIN domains d ON t.domain_id = d.id
+CROSS JOIN systems s JOIN exam_tracks et ON s.exam_track_id = et.id
+WHERE d.slug = 'safe-care' AND t.slug = 'lvn-infection-control' AND s.slug = 'safety-infection-control' AND et.slug = 'lvn'::exam_track_slug
+ON CONFLICT (topic_id, system_id) DO NOTHING;
+
+INSERT INTO topic_system_links (topic_id, system_id, display_order)
+SELECT t.id, s.id, 1
+FROM topics t JOIN domains d ON t.domain_id = d.id
+CROSS JOIN systems s JOIN exam_tracks et ON s.exam_track_id = et.id
+WHERE d.slug = 'safe-care' AND t.slug = 'prioritization' AND s.slug = 'safety-infection-control' AND et.slug = 'lvn'::exam_track_slug
 ON CONFLICT (topic_id, system_id) DO NOTHING;
 
 -- -----------------------------------------------------------------------------
@@ -275,7 +862,7 @@ ON CONFLICT (question_id, skill_slug) DO NOTHING;
 -- -----------------------------------------------------------------------------
 INSERT INTO exam_templates (exam_track_id, slug, name, description, question_count, duration_minutes, blueprint_type)
 SELECT et.id, 'pre_practice', 'Pre-Practice Exam', 'Full-length 150-question diagnostic', 150, 180, 'pre_practice'
-FROM exam_tracks et WHERE et.slug = 'rn'
+FROM exam_tracks et WHERE et.slug = 'rn'::exam_track_slug
 ON CONFLICT (exam_track_id, slug) DO NOTHING;
 
 INSERT INTO exam_templates (exam_track_id, slug, name, description, question_count, duration_minutes, blueprint_type)
@@ -317,7 +904,7 @@ WHERE et.slug = 'rn' AND sg.slug = 'cardiovascular-guide';
 INSERT INTO topic_summaries (topic_id, exam_track_id, summary_text, key_points)
 SELECT t.id, et.id, 'Heart failure management focuses on GDMT for HFrEF.', '["ACE-I/ARB/ARNI", "Beta-blockers", "MRAs", "SGLT2i", "Diuretics"]'::jsonb
 FROM topics t JOIN domains d ON t.domain_id = d.id, exam_tracks et
-WHERE d.slug = 'safe-care' AND t.slug = 'heart-failure' AND et.slug = 'rn'
+WHERE d.slug = 'safe-care' AND t.slug = 'heart-failure' AND et.slug = 'rn'::exam_track_slug
 ON CONFLICT (topic_id, exam_track_id) DO NOTHING;
 
 -- -----------------------------------------------------------------------------

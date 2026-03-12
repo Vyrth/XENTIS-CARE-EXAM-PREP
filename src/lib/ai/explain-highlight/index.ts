@@ -36,6 +36,7 @@ export async function runExplainHighlight(
   options?: {
     userId?: string;
     retrievedContext?: string;
+    adaptiveContext?: import("@/lib/readiness/adaptive-context").AdaptiveContextOutput | null;
   }
 ): Promise<ExplainHighlightResult> {
   const validation = validateInput(request.selectedText, "highlight");
@@ -53,7 +54,10 @@ export async function runExplainHighlight(
   }
 
   const mode = request.mode ?? DEFAULT_MODE;
-  const systemPrompt = buildExplainHighlightSystemPrompt(request.examTrack);
+  const systemPrompt = buildExplainHighlightSystemPrompt(
+    request.examTrack,
+    options?.adaptiveContext
+  );
   const userPrompt = buildExplainHighlightUserPrompt(
     request.selectedText,
     request.examTrack,
@@ -64,6 +68,7 @@ export async function runExplainHighlight(
       sourceType: request.sourceType,
       sourceId: request.sourceId,
       retrievedContext: options?.retrievedContext,
+      adaptiveContext: options?.adaptiveContext,
     }
   );
 

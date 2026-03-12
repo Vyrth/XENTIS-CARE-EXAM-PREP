@@ -53,3 +53,35 @@ export function generateRemediationPlan(
 
   return plans.sort((a, b) => b.gap - a.gap);
 }
+
+/** Plan data shape for user_remediation_plans.plan_data */
+export interface RemediationPlanData {
+  focusAreas: { name: string; type: string; entityId: string; gap: number }[];
+  suggestedQuestionCount: number;
+  suggestedSections?: string[];
+  summary?: string;
+  suggestedNextStep?: string;
+}
+
+/** Build plan_data for user_remediation_plans from remediation items */
+export function toRemediationPlanData(
+  items: RemediationItem[],
+  options?: { suggestedNextStep?: string; summary?: string }
+): RemediationPlanData {
+  const focusAreas = items.map((item) => ({
+    name: item.name,
+    type: item.type,
+    entityId: item.entityId,
+    gap: item.gap,
+  }));
+  const suggestedQuestionCount = items.reduce(
+    (sum, item) => sum + item.estimatedQuestions,
+    0
+  );
+  return {
+    focusAreas,
+    suggestedQuestionCount,
+    suggestedNextStep: options?.suggestedNextStep,
+    summary: options?.summary,
+  };
+}

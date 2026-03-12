@@ -13,6 +13,7 @@ npm run dev
 ## Documentation
 
 - **[Local Setup](docs/LOCAL_SETUP.md)** — Env vars, scripts, database, tooling
+- **[Local vs Remote Supabase Commands](docs/LOCAL_VS_REMOTE_SUPABASE.md)** — Avoid mixing local and remote DB workflows
 - **[Seed Strategy](docs/SEED_STRATEGY.md)** — Content and user seed data
 - **[QA Checklist](docs/QA_CHECKLIST.md)** — Pre-release verification
 - **[Demo Walkthrough](docs/DEMO_WALKTHROUGH.md)** — Step-by-step demo flow
@@ -29,7 +30,10 @@ npm run dev
 |---------|-------------|
 | `npm run dev` | Start dev server |
 | `npm run qa` | Typecheck + lint + format + test |
-| `npm run db:seed` | Reset DB and run seed |
+| `npm run db:local:start` | Start local Supabase |
+| `npm run db:local:migrate` | Reset local DB, run migrations + seed |
+| `npm run db:remote:push` | Push migrations to remote Supabase |
+| `npm run db:seed` | Same as db:local:migrate |
 | `npm run seed:user` | Seed user data (after signup) |
 
 ## Tech Stack

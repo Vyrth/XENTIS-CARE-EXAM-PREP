@@ -1,12 +1,4 @@
 import { Card } from "@/components/ui/Card";
-import { MOCK_USER_ISSUES } from "@/data/mock/admin";
-
-const ISSUE_STATUS_COLORS: Record<string, string> = {
-  open: "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300",
-  in_review: "bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300",
-  resolved: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300",
-  dismissed: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400",
-};
 
 export default function UserIssueReportsPage() {
   return (
@@ -32,26 +24,11 @@ export default function UserIssueReportsPage() {
               </tr>
             </thead>
             <tbody>
-              {MOCK_USER_ISSUES.map((issue) => (
-                <tr key={issue.id} className="border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                  <td className="p-4 text-slate-600 dark:text-slate-400">
-                    {issue.entityType} / {issue.entityId}
-                  </td>
-                  <td className="p-4 text-slate-600 dark:text-slate-400 capitalize">{issue.issueType}</td>
-                  <td className="p-4 text-slate-900 dark:text-white max-w-md">{issue.description}</td>
-                  <td className="p-4">
-                    <span className={`inline-flex px-2 py-0.5 rounded text-xs font-medium ${ISSUE_STATUS_COLORS[issue.status] ?? ""}`}>
-                      {issue.status}
-                    </span>
-                  </td>
-                  <td className="p-4 text-slate-500 text-sm">
-                    {new Date(issue.createdAt).toLocaleDateString()}
-                  </td>
-                  <td className="p-4">
-                    <button type="button" className="text-indigo-600 hover:underline text-sm">Review</button>
-                  </td>
-                </tr>
-              ))}
+              <tr>
+                <td colSpan={6} className="p-8 text-center text-slate-500 text-sm">
+                  No issue reports yet. When user_issue_reports table exists, reports will appear here.
+                </td>
+              </tr>
             </tbody>
           </table>
         </div>

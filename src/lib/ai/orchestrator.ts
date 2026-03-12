@@ -8,7 +8,7 @@ import { retrieveChunks } from "./retrieval";
 import { getSystemPrompt } from "./prompts/system";
 import { fillTemplate, PROMPT_TEMPLATES } from "./prompts/templates";
 import { validateInput, FALLBACK_MESSAGES } from "./guardrails";
-import { checkUsageLimit } from "./usage";
+import { checkUsageLimitAsync } from "./usage";
 import type { AIRequest, AIResponse, AIAction } from "@/types/ai-tutor";
 
 function formatRetrievedContext(chunks: { chunkText: string }[]): string {
@@ -23,7 +23,7 @@ async function callChat(
   const openai = getOpenAIClient();
   if (!openai) {
     return {
-      content: "[AI Tutor] Set OPENAI_API_KEY to enable. Using mock response for development.",
+      content: "Jade Tutor requires OPENAI_API_KEY to be configured. Add it to your environment to use the AI tutor.",
       promptTokens: 0,
       completionTokens: 0,
     };
@@ -65,7 +65,7 @@ export async function runAIAction(
 ): Promise<{ success: boolean; data?: AIResponse; error?: string }> {
   const { action, track } = req;
 
-  const usageCheck = checkUsageLimit(req.userId, action, "free");
+  const usageCheck = await checkUsageLimitAsync(req.userId, action, "free");
   if (!usageCheck.allowed) {
     return {
       success: false,
@@ -158,7 +158,7 @@ export async function runAIAction(
       return { success: false, error: "Unknown action" };
   }
 
-  const chunks = retrieveChunks(query, { limit: AI_TUTOR_CONFIG.maxRetrievalChunks });
+  const chunks = await retrieveChunks(query, { limit: AI_TUTOR_CONFIG.maxRetrievalChunks });
   vars.retrievedContext = formatRetrievedContext(chunks);
 
   const userPrompt = fillTemplate(templateKey, vars);
@@ -167,7 +167,7 @@ export async function runAIAction(
   try {
     const { content, promptTokens, completionTokens } = await callChat(systemPrompt, userPrompt);
 
-    const contentRefs = chunks.map((c) => c.contentId);
+    const contentRefs = chunks.map((c) => c.contentId).filter(Boolean);
 
     if (action === "generate_flashcards") {
       const parsed = tryParseJSON<{ front: string; back: string }[]>(content);

@@ -11,4 +11,7 @@ export * from "./recommendation-engine";
 export * from "./adaptive-queue";
 export * from "./content-queue";
 export * from "./remediation-plan";
+export * from "./context-builder";
+export * from "./adaptive-context";
 export * from "./system-completion";
+export * from "./study-workflow";

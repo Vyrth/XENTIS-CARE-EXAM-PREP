@@ -4,9 +4,12 @@ import Link from "next/link";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import type { TopTrap } from "@/types/high-yield";
+import type { TrackSlug } from "@/data/mock/types";
+import { getTrackDisplayName } from "@/lib/high-yield/track-display";
 
 export interface TopTrapsCardProps {
   traps: TopTrap[];
+  track?: TrackSlug;
   maxItems?: number;
 }
 
@@ -16,8 +19,9 @@ const frequencyColors = {
   common: "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300",
 };
 
-export function TopTrapsCard({ traps, maxItems = 4 }: TopTrapsCardProps) {
+export function TopTrapsCard({ traps, track = "rn", maxItems = 4 }: TopTrapsCardProps) {
   const display = traps.slice(0, maxItems);
+  const trackName = getTrackDisplayName(track);
 
   return (
     <Card>
@@ -25,8 +29,13 @@ export function TopTrapsCard({ traps, maxItems = 4 }: TopTrapsCardProps) {
         Top Traps
       </h2>
       <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
-        Common exam pitfalls. Know these to avoid losing easy points.
+        Common {trackName} exam pitfalls. Know these to avoid losing easy points.
       </p>
+      {display.length === 0 ? (
+        <div className="py-6 text-center text-slate-500 dark:text-slate-400 text-sm">
+          No traps data yet for {trackName}. Content will appear as it is added.
+        </div>
+      ) : (
       <div className="space-y-4">
         {display.map((trap) => (
           <div
@@ -54,12 +63,15 @@ export function TopTrapsCard({ traps, maxItems = 4 }: TopTrapsCardProps) {
           </div>
         ))}
       </div>
-      <Link
-        href="/high-yield/traps"
-        className="mt-4 inline-block text-sm text-indigo-600 dark:text-indigo-400 hover:underline"
-      >
-        See all traps →
-      </Link>
+      )}
+      {display.length > 0 && (
+        <Link
+          href="/high-yield/traps"
+          className="mt-4 inline-block text-sm text-indigo-600 dark:text-indigo-400 hover:underline"
+        >
+          See all traps →
+        </Link>
+      )}
     </Card>
   );
 }

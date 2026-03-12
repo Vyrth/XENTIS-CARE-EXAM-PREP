@@ -1,8 +1,16 @@
 /**
  * Prompt builder for Explain Highlight - track-specific, mode-aware.
  * Structures output for parsing into ExplainHighlightResponse.
+ * Supports adaptive context injection for readiness-aware responses.
  */
 
+import type { AdaptiveContextOutput } from "@/lib/readiness/adaptive-context";
+import {
+  injectAdaptiveSystemPrompt,
+  injectAdaptiveUserContext,
+  appendAdaptiveNextStepInstruction,
+} from "@/lib/ai/adaptive";
+import { appendTrackStrictInstruction } from "@/lib/ai/jade-track-context";
 import type { ExamTrack, ExplainMode } from "./types";
 
 const TRACK_NAMES: Record<ExamTrack, string> = {
@@ -24,9 +32,12 @@ const MODE_INSTRUCTIONS: Record<ExplainMode, string> = {
 };
 
 /** Build system prompt for track-specific board prep tutor */
-export function buildExplainHighlightSystemPrompt(track: ExamTrack): string {
+export function buildExplainHighlightSystemPrompt(
+  track: ExamTrack,
+  adaptive?: AdaptiveContextOutput | null
+): string {
   const trackName = TRACK_NAMES[track];
-  return `You are a nursing board exam tutor specializing in ${trackName} preparation. Your role is to explain concepts clearly for students preparing for their licensing exam.
+  const base = `You are a nursing board exam tutor specializing in ${trackName} preparation. Your role is to explain concepts clearly for students preparing for their licensing exam.
 
 Guidelines:
 - Use clear, educational language appropriate for nursing students
@@ -34,6 +45,8 @@ Guidelines:
 - Never provide specific medical advice, diagnoses, or treatment recommendations
 - Be encouraging and supportive
 - When in doubt, cite that students should verify with their study materials`;
+  const withAdaptive = injectAdaptiveSystemPrompt(base, adaptive ?? null);
+  return appendTrackStrictInstruction(withAdaptive, track);
 }
 
 /** Build user prompt with selected text, mode, and optional context */
@@ -47,6 +60,7 @@ export function buildExplainHighlightUserPrompt(
     sourceType?: string;
     sourceId?: string;
     retrievedContext?: string;
+    adaptiveContext?: AdaptiveContextOutput | null;
   }
 ): string {
   const trackName = TRACK_NAMES[track];
@@ -83,5 +97,9 @@ ${context.retrievedContext}
 Additional context: source=${context.sourceType ?? "unknown"}, topicId=${context.topicId ?? "none"}, systemId=${context.systemId ?? "none"}`;
   }
 
-  return prompt;
+  let finalPrompt = injectAdaptiveUserContext(prompt, context?.adaptiveContext ?? null, {
+    position: "before",
+  });
+  finalPrompt = appendAdaptiveNextStepInstruction(finalPrompt, context?.adaptiveContext ?? null);
+  return finalPrompt;
 }

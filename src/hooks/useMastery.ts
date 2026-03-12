@@ -17,9 +17,11 @@ export interface MasteryData {
   domains: RawPerformanceRecord[];
   skills: RawPerformanceRecord[];
   itemTypes: RawPerformanceRecord[];
+  systemSlugMap?: Record<string, string>;
+  domainSlugMap?: Record<string, string>;
 }
 
-/** Hook to compute mastery rollups and weak/strong areas */
+/** Hook to compute mastery rollups and weak/strong areas. Uses data reference for stability. */
 export function useMastery(data: MasteryData | null) {
   return useMemo(() => {
     if (!data) return null;

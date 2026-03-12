@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState, useCallback, useEffect, useRef } from "react";
 import { Card } from "@/components/ui/Card";
 import { Icons } from "@/components/ui/icons";
@@ -12,11 +13,14 @@ import {
   weakAreaCoaching,
   quizFollowup,
   generateMnemonic,
+  chatWithJade,
 } from "@/app/actions/ai";
+import { UpgradePrompt } from "@/components/billing/UpgradePrompt";
 import type { TrackSlug } from "@/data/mock/types";
 import type { MnemonicType } from "@/types/ai-tutor";
 
 type Message = { role: "user" | "assistant"; content: string };
+type QuestionItem = { stem: string; options: { key: string; text: string; isCorrect: boolean }[]; rationale: string; correctKey: string };
 
 export interface AITutorChatProps {
   track: TrackSlug;
@@ -29,6 +33,8 @@ export interface AITutorChatProps {
   runExplainQuestionOnMount?: boolean;
   /** For weak area coaching */
   weakAreas?: { systems: string[]; domains: string[] };
+  /** Workflow-driven next-step suggestions */
+  nextStepSuggestions?: { href: string; title: string; description: string }[];
   onSaveToNotebook?: (content: string) => void;
   onSaveFlashcards?: (cards: { front: string; back: string }[]) => void;
 }
@@ -39,6 +45,7 @@ export function AITutorChat({
   initialAction,
   questionContext,
   weakAreas,
+  nextStepSuggestions,
   onSaveToNotebook,
   onSaveFlashcards,
   runExplainQuestionOnMount,
@@ -47,6 +54,13 @@ export function AITutorChat({
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [lastFlashcards, setLastFlashcards] = useState<{ front: string; back: string }[]>([]);
+  const [lastQuestions, setLastQuestions] = useState<QuestionItem[]>([]);
+  const [lastConceptExplanation, setLastConceptExplanation] = useState<{
+    title: string;
+    summary: string;
+    high_yield_points: string[];
+    common_traps: string[];
+  } | null>(null);
   const [lastSummary, setLastSummary] = useState("");
 
   const addMessage = useCallback((role: "user" | "assistant", content: string) => {
@@ -64,14 +78,12 @@ export function AITutorChat({
         switch (action) {
           case "explain_highlight":
             result = await explainHighlight({
-              track,
               highlightedText: params.text as string,
               contentRef: params.contentRef as string,
             });
             break;
           case "explain_question":
             result = await explainQuestion({
-              track,
               questionStem: params.stem as string,
               rationale: params.rationale as string,
               correctAnswer: params.correctAnswer as string,
@@ -79,38 +91,32 @@ export function AITutorChat({
             break;
           case "compare_concepts":
             result = await compareConcepts({
-              track,
               concepts: params.concepts as string[],
             });
             break;
           case "generate_flashcards":
             result = await generateFlashcards({
-              track,
               content: params.content as string,
             });
             break;
           case "summarize_to_notebook":
             result = await summarizeToNotebook({
-              track,
               notebookContent: params.content as string,
             });
             break;
           case "weak_area_coaching":
             result = await weakAreaCoaching({
-              track,
               weakSystems: params.systems as string[],
               weakDomains: params.domains as string[],
             });
             break;
           case "quiz_followup":
             result = await quizFollowup({
-              track,
               content: params.content as string,
             });
             break;
           case "generate_mnemonic":
             result = await generateMnemonic({
-              track,
               topic: params.topic as string,
               mnemonicType: params.mnemonicType as MnemonicType,
             });
@@ -129,15 +135,20 @@ export function AITutorChat({
           }
           return result.data;
         }
-        addMessage("assistant", (result as { error?: string }).error ?? "Something went wrong.");
-      } catch (e) {
-        addMessage("assistant", "Failed to get AI response. Please try again.");
+        const errResult = result as { error?: string; upgradeRequired?: boolean };
+        if (errResult.upgradeRequired) {
+          addMessage("assistant", "UPGRADE_PROMPT");
+          return null;
+        }
+        addMessage("assistant", errResult.error ?? "Request failed. Please try again.");
+      } catch {
+        addMessage("assistant", "Jade Tutor is temporarily unavailable. Please try again in a moment.");
       } finally {
         setIsLoading(false);
       }
       return null;
     },
-    [track, addMessage]
+    [addMessage]
   );
 
   // Run initial action when context or question is provided (once)
@@ -184,8 +195,54 @@ export function AITutorChat({
 
     addMessage("user", text);
     setInput("");
+    setIsLoading(true);
 
-    await runAction("explain_highlight", { text, contentRef: "" });
+    try {
+      const result = await chatWithJade({
+        message: text,
+        weakAreas: weakAreas
+          ? { systems: weakAreas.systems, domains: weakAreas.domains }
+          : undefined,
+      });
+
+      if (result.success) {
+        if (result.questions && result.questions.length > 0) {
+          setLastQuestions(result.questions);
+          setLastFlashcards([]);
+          setLastConceptExplanation(null);
+          addMessage("assistant", result.content ?? `Here are ${result.questions.length} practice questions.`);
+        } else if (result.flashcards && result.flashcards.length > 0) {
+          setLastFlashcards(result.flashcards);
+          setLastQuestions([]);
+          setLastConceptExplanation(null);
+          addMessage("assistant", result.content ?? `Here are ${result.flashcards.length} flashcards.`);
+        } else if (result.conceptExplanation) {
+          setLastConceptExplanation(result.conceptExplanation);
+          setLastQuestions([]);
+          setLastFlashcards([]);
+          addMessage("assistant", result.content ?? result.conceptExplanation.summary);
+        } else {
+          setLastQuestions([]);
+          setLastFlashcards([]);
+          setLastConceptExplanation(null);
+          addMessage("assistant", result.content ?? "I couldn't generate a response. Please try again.");
+        }
+      } else if (result.upgradeRequired) {
+        addMessage("assistant", "UPGRADE_PROMPT");
+      } else {
+        addMessage(
+          "assistant",
+          result.error ?? "Jade couldn't respond. Check your connection or try a different request."
+        );
+      }
+    } catch {
+      addMessage(
+        "assistant",
+        "Jade Tutor is temporarily unavailable. Please try again in a moment."
+      );
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleQuickAction = async (
@@ -227,7 +284,24 @@ export function AITutorChat({
         {messages.length === 0 && !initialContext && (
           <div className="text-center py-12 text-slate-500 dark:text-slate-400 space-y-4">
             <span className="inline-block text-4xl">{Icons.sparkles}</span>
-            <p>Ask anything about nursing concepts. Or use quick actions:</p>
+            <p>Ask anything about nursing concepts. Jade Tutor is here to help—use quick actions below or type your question.</p>
+            {nextStepSuggestions && nextStepSuggestions.length > 0 && (
+              <div className="text-left max-w-md mx-auto">
+                <p className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Suggested next steps</p>
+                <div className="flex flex-col gap-2">
+                  {nextStepSuggestions.slice(0, 3).map((s) => (
+                    <Link
+                      key={s.href + s.title}
+                      href={s.href}
+                      className="block px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-sm transition-colors"
+                    >
+                      <span className="font-medium">{s.title}</span>
+                      <span className="block text-xs text-slate-500 dark:text-slate-400 mt-0.5">{s.description}</span>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            )}
             <div className="flex flex-wrap justify-center gap-2">
               {questionContext && (
                 <button
@@ -270,22 +344,88 @@ export function AITutorChat({
             key={i}
             className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}
           >
-            <div
-              className={`max-w-[85%] rounded-xl px-4 py-3 ${
-                m.role === "user"
-                  ? "bg-indigo-600 text-white"
-                  : "bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white"
-              }`}
-            >
-              <p className="text-sm whitespace-pre-wrap">{m.content}</p>
-            </div>
+            {m.role === "assistant" && m.content === "UPGRADE_PROMPT" ? (
+              <div className="max-w-[85%] w-full">
+                <UpgradePrompt
+                  reason="Daily Jade Tutor limit reached"
+                  usage="Upgrade for unlimited actions"
+                  variant="inline"
+                />
+              </div>
+            ) : (
+              <div
+                className={`max-w-[85%] rounded-xl px-4 py-3 ${
+                  m.role === "user"
+                    ? "bg-indigo-600 text-white"
+                    : "bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white"
+                }`}
+              >
+                <p className="text-sm whitespace-pre-wrap">{m.content}</p>
+              </div>
+            )}
           </div>
         ))}
 
         {isLoading && (
           <div className="flex justify-start">
             <div className="bg-slate-100 dark:bg-slate-800 rounded-xl px-4 py-3">
-              <span className="animate-pulse">Thinking...</span>
+              <span className="animate-pulse">Jade is thinking...</span>
+            </div>
+          </div>
+        )}
+
+        {lastQuestions.length > 0 && (
+          <div className="flex justify-start max-w-[85%]">
+            <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl px-4 py-3 border border-slate-200 dark:border-slate-700 space-y-4">
+              <p className="text-sm font-medium text-slate-800 dark:text-slate-200">
+                {lastQuestions.length} practice questions
+              </p>
+              {lastQuestions.map((q, i) => (
+                <div key={i} className="border-b border-slate-200 dark:border-slate-700 pb-3 last:border-0 last:pb-0">
+                  <p className="text-sm text-slate-700 dark:text-slate-300 mb-2">{q.stem}</p>
+                  <div className="space-y-1 mb-2">
+                    {q.options.map((o) => (
+                      <p key={o.key} className="text-xs text-slate-600 dark:text-slate-400">
+                        {o.key}. {o.text} {o.isCorrect ? "✓" : ""}
+                      </p>
+                    ))}
+                  </div>
+                  <p className="text-xs text-slate-500 dark:text-slate-500 italic">{q.rationale}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {lastConceptExplanation && (
+          <div className="flex justify-start max-w-[85%]">
+            <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl px-4 py-3 border border-slate-200 dark:border-slate-700 space-y-3">
+              <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+                {lastConceptExplanation.title}
+              </p>
+              <p className="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-wrap">
+                {lastConceptExplanation.summary}
+              </p>
+              {lastConceptExplanation.high_yield_points.length > 0 && (
+                <div>
+                  <p className="text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">High-yield points</p>
+                  <ul className="list-disc list-inside text-xs text-slate-600 dark:text-slate-400 space-y-0.5">
+                    {lastConceptExplanation.high_yield_points.map((pt, i) => (
+                      <li key={i}>{pt}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {lastConceptExplanation.common_traps.length > 0 && (
+                <div>
+                  <p className="text-xs font-medium text-amber-700 dark:text-amber-400 mb-1">Common traps</p>
+                  <ul className="list-disc list-inside text-xs text-slate-600 dark:text-slate-400 space-y-0.5">
+                    {lastConceptExplanation.common_traps.map((t, i) => (
+                      <li key={i}>{t}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -337,7 +477,7 @@ export function AITutorChat({
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Ask anything..."
+            placeholder="Ask Jade Tutor anything..."
             className="flex-1 px-4 py-2 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder:text-slate-500"
           />
           <button

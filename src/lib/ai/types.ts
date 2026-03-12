@@ -11,7 +11,8 @@ export type TutorMode =
   | "generate_flashcards"
   | "summarize_note"
   | "weak_area_coach"
-  | "mnemonic_generator";
+  | "mnemonic_generator"
+  | "notebook_summary";
 
 /** Exam track for context */
 export type AITrack = "lvn" | "rn" | "fnp" | "pmhnp";
@@ -78,11 +79,22 @@ export interface SummarizeNoteParams extends TutorModeParams {
 export interface WeakAreaCoachParams extends TutorModeParams {
   weakSystems: string[];
   weakDomains: string[];
+  weakSkills?: string[];
+  weakItemTypes?: string[];
+  readinessBand?: string;
+  recentMistakes?: string[];
+  currentStudyPlan?: string;
+  coachingMode?: "explain_weakness" | "remediation_plan" | "teach_from_zero" | "exam_readiness";
 }
 
 export interface MnemonicGeneratorParams extends TutorModeParams {
   topic: string;
   mnemonicType?: MnemonicType;
+}
+
+export interface NotebookSummaryParams extends TutorModeParams {
+  noteText: string;
+  summaryMode?: "clean_summary" | "high_yield" | "study_outline" | "plain_language" | "board_focus";
 }
 
 /** Union of all tutor mode params */
@@ -93,7 +105,8 @@ export type TutorParams =
   | GenerateFlashcardsParams
   | SummarizeNoteParams
   | WeakAreaCoachParams
-  | MnemonicGeneratorParams;
+  | MnemonicGeneratorParams
+  | NotebookSummaryParams;
 
 // -----------------------------------------------------------------------------
 // Tutor response - content + optional structured output

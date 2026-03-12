@@ -1,4 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/service";
+import { isSupabaseServiceRoleConfigured } from "@/lib/supabase/env";
 
 export type Profile = {
   id: string;
@@ -53,6 +55,7 @@ export async function syncProfileFromAuth(userId: string, metadata: {
 
 /**
  * Complete onboarding: set track, target date, study minutes, study mode.
+ * Uses service role when available to ensure write succeeds (bypasses RLS/session quirks).
  */
 export async function completeOnboarding(
   userId: string,
@@ -63,9 +66,10 @@ export async function completeOnboarding(
     preferred_study_mode: string;
   }
 ): Promise<{ error: Error | null }> {
-  const supabase = await createClient();
+  const supabase = isSupabaseServiceRoleConfigured()
+    ? createServiceClient()
+    : await createClient();
 
-  // Upsert user_exam_tracks
   const { error: trackError } = await supabase.from("user_exam_tracks").upsert(
     {
       user_id: userId,
@@ -74,7 +78,12 @@ export async function completeOnboarding(
     { onConflict: "user_id,exam_track_id" }
   );
 
-  if (trackError) return { error: trackError as unknown as Error };
+  if (trackError) {
+    if (process.env.NODE_ENV === "development") {
+      console.error("[profile] user_exam_tracks upsert failed:", trackError);
+    }
+    return { error: trackError as unknown as Error };
+  }
 
   const { error: profileError } = await supabase
     .from("profiles")
@@ -88,5 +97,65 @@ export async function completeOnboarding(
     })
     .eq("id", userId);
 
-  return { error: profileError as unknown as Error ?? null };
+  if (profileError) {
+    if (process.env.NODE_ENV === "development") {
+      console.error("[profile] profiles update failed:", profileError);
+    }
+    return { error: profileError as unknown as Error };
+  }
+
+  return { error: null };
+}
+
+/**
+ * Update study preferences (track, target date, study minutes, study mode).
+ * Used by study plan form and profile preferences.
+ * Persists to profiles table; optionally syncs user_exam_tracks.
+ */
+export async function updateStudyPreferences(
+  userId: string,
+  data: {
+    exam_track_id?: string;
+    target_exam_date?: string | null;
+    study_minutes_per_day?: number | null;
+    preferred_study_mode?: string | null;
+  }
+): Promise<{ error: Error | null }> {
+  const supabase = isSupabaseServiceRoleConfigured()
+    ? createServiceClient()
+    : await createClient();
+
+  if (data.exam_track_id) {
+    const { error: trackError } = await supabase.from("user_exam_tracks").upsert(
+      {
+        user_id: userId,
+        exam_track_id: data.exam_track_id,
+      },
+      { onConflict: "user_id,exam_track_id" }
+    );
+    if (trackError) {
+      if (process.env.NODE_ENV === "development") {
+        console.error("[profile] user_exam_tracks upsert failed:", trackError);
+      }
+      return { error: trackError as unknown as Error };
+    }
+  }
+
+  const updates: Record<string, unknown> = {
+    updated_at: new Date().toISOString(),
+  };
+  if (data.exam_track_id !== undefined) updates.primary_exam_track_id = data.exam_track_id;
+  if (data.target_exam_date !== undefined) updates.target_exam_date = data.target_exam_date;
+  if (data.study_minutes_per_day !== undefined) updates.study_minutes_per_day = data.study_minutes_per_day;
+  if (data.preferred_study_mode !== undefined) updates.preferred_study_mode = data.preferred_study_mode;
+
+  const { error } = await supabase.from("profiles").update(updates).eq("id", userId);
+
+  if (error) {
+    if (process.env.NODE_ENV === "development") {
+      console.error("[profile] updateStudyPreferences failed:", error);
+    }
+    return { error: error as unknown as Error };
+  }
+  return { error: null };
 }

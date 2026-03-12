@@ -1,5 +1,7 @@
 /**
- * Shared types for mock data - aligned with Supabase schema for easy migration
+ * Shared types - used across app for TrackSlug, Question, Note, etc.
+ * TYPE-ONLY: No runtime mock data. Aligned with Supabase schema.
+ * Location: data/mock/types (historical; consider moving to src/types/ in future).
  */
 export type TrackSlug = "lvn" | "rn" | "fnp" | "pmhnp";
 

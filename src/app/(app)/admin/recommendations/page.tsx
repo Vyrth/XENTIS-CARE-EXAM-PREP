@@ -1,5 +1,4 @@
 import { Card } from "@/components/ui/Card";
-import { MOCK_RECOMMENDATIONS } from "@/data/mock/recommendations";
 
 export default function AdaptiveRecommendationManagerPage() {
   return (
@@ -15,25 +14,10 @@ export default function AdaptiveRecommendationManagerPage() {
         <h2 className="font-heading font-semibold text-slate-900 dark:text-white mb-4">
           Current Recommendation Templates
         </h2>
-        <div className="space-y-4">
-          {MOCK_RECOMMENDATIONS.map((rec) => (
-            <div
-              key={rec.id}
-              className="p-4 rounded-lg border border-slate-200 dark:border-slate-700"
-            >
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="font-medium text-slate-900 dark:text-white">{rec.title}</p>
-                  <p className="text-sm text-slate-500 mt-1">{rec.description}</p>
-                  <p className="text-xs text-slate-400 mt-1">Priority: {rec.priority} · Reason: {rec.reason}</p>
-                </div>
-                <span className="px-2 py-0.5 rounded text-xs bg-slate-100 dark:bg-slate-800">
-                  {rec.type}
-                </span>
-              </div>
-            </div>
-          ))}
-        </div>
+        <p className="text-slate-500 dark:text-slate-400 text-sm">
+          No recommendation templates configured yet. Rules are computed from adaptive_recommendation_profiles,
+          recommended_content_queue, and user_remediation_plans. Configure rules below when ready.
+        </p>
       </Card>
 
       <Card>

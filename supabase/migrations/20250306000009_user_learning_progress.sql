@@ -165,9 +165,9 @@ CREATE TABLE exam_session_questions (
   is_correct BOOLEAN,
   time_spent_seconds INT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  -- Unique enforced via expression index below (handles NULL interaction_id)
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+-- Unique enforced via expression index below (handles NULL interaction_id)
 
 CREATE UNIQUE INDEX idx_exam_session_questions_session_question_interaction
   ON exam_session_questions(exam_session_id, question_id, COALESCE(question_interaction_id::text, ''));

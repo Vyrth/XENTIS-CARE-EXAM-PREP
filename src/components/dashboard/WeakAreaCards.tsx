@@ -36,9 +36,18 @@ export function WeakAreaCards({
 
   return (
     <Card>
-      <h2 className="font-heading font-semibold text-slate-900 dark:text-white mb-4">
-        Focus Areas
-      </h2>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="font-heading font-semibold text-slate-900 dark:text-white">
+          Focus Areas
+        </h2>
+        <Link
+          href="/weak-areas"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-700"
+        >
+          Remediate with Jade Tutor
+          {Icons.chevronRight}
+        </Link>
+      </div>
       <div className="space-y-4">
         {display.map((area) => {
           const entityId = area.id.replace(`${area.type}-`, "");

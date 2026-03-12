@@ -49,6 +49,8 @@ export interface HighYieldTopic {
   topicName: string;
   systemId: string;
   systemName: string;
+  /** System slug for URLs (e.g. cardiovascular). When present, used for practice links. */
+  systemSlug?: string;
   track: TrackSlug;
   /** Composite score 0-100 */
   score: number;

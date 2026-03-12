@@ -1,5 +1,4 @@
 import { Card } from "@/components/ui/Card";
-import { MOCK_MEDIA_RIGHTS } from "@/data/mock/admin";
 
 export default function MediaRightsLibraryPage() {
   return (
@@ -35,18 +34,11 @@ export default function MediaRightsLibraryPage() {
               </tr>
             </thead>
             <tbody>
-              {MOCK_MEDIA_RIGHTS.map((mr) => (
-                <tr key={mr.id} className="border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                  <td className="p-4 font-medium text-slate-900 dark:text-white">{mr.title}</td>
-                  <td className="p-4 text-slate-600 dark:text-slate-400 capitalize">{mr.mediaType}</td>
-                  <td className="p-4 text-slate-600 dark:text-slate-400">{mr.license}</td>
-                  <td className="p-4 text-slate-600 dark:text-slate-400">{mr.licenseExpiry ?? "—"}</td>
-                  <td className="p-4 text-slate-600 dark:text-slate-400 text-sm max-w-xs truncate">{mr.attribution ?? "—"}</td>
-                  <td className="p-4">
-                    <button type="button" className="text-indigo-600 hover:underline text-sm">Edit</button>
-                  </td>
-                </tr>
-              ))}
+              <tr>
+                <td colSpan={6} className="p-8 text-center text-slate-500 text-sm">
+                  No media rights records yet. When media_rights table exists, records will appear here.
+                </td>
+              </tr>
             </tbody>
           </table>
         </div>

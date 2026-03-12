@@ -1,4 +1,4 @@
-import { NextResponse, type NextRequest } from "next/server";
+import { NextResponse, NextRequest } from "next/server";
 import { updateSession } from "@/lib/supabase/middleware";
 
 /**
@@ -15,7 +15,7 @@ const PUBLIC_ROUTES = [
 /**
  * Auth routes - sign in, callback (redirect if already authenticated)
  */
-const AUTH_ROUTES = ["/login", "/signup"];
+const AUTH_ROUTES = ["/login", "/signup", "/admin/login"];
 
 /**
  * Onboarding - first-time setup (redirect if already completed)
@@ -52,8 +52,11 @@ function isAuthCallbackRoute(pathname: string): boolean {
 }
 
 export async function middleware(request: NextRequest) {
-  const { user, response } = await updateSession(request);
   const { pathname } = request.nextUrl;
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set("x-pathname", pathname);
+  const requestWithPathname = new NextRequest(request.url, { headers: requestHeaders });
+  const { user, response } = await updateSession(requestWithPathname);
 
   // Auth callback - always allow (Supabase handles redirect)
   if (isAuthCallbackRoute(pathname)) {
@@ -65,9 +68,13 @@ export async function middleware(request: NextRequest) {
     return response;
   }
 
-  // Auth routes (login, signup) - allow unauthenticated; redirect authenticated users
+  // Auth routes (login, signup, admin/login) - allow unauthenticated; redirect authenticated users
   if (isAuthRoute(pathname)) {
     if (user) {
+      if (pathname.startsWith("/admin/login")) {
+        // Admin login: redirect to /admin (layout will redirect to /dashboard if not admin)
+        return NextResponse.redirect(new URL("/admin", request.url));
+      }
       const redirectTo =
         request.nextUrl.searchParams.get("redirectTo") || "/dashboard";
       return NextResponse.redirect(new URL(redirectTo, request.url));

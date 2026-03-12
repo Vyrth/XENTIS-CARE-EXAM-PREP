@@ -2,31 +2,65 @@
 
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { useExam } from "@/hooks/useExam";
+import { useState, useCallback, useMemo } from "react";
+import { useExamSession } from "@/hooks/useExamSession";
 import { Card } from "@/components/ui/Card";
-import { Icons } from "@/components/ui/icons";
-import {
-  MOCK_QUESTIONS,
-  MOCK_IMAGE_QUESTION,
-  MOCK_CASE_STUDY_QUESTION,
-} from "@/data/mock/questions";
-
-const ALL_QUESTIONS = [
-  ...MOCK_QUESTIONS,
-  MOCK_IMAGE_QUESTION,
-  MOCK_CASE_STUDY_QUESTION,
-];
 
 export default function ExamReviewNavigatorPage() {
   const params = useParams();
   const router = useRouter();
   const examId = params.examId as string;
-  const questionIds = ALL_QUESTIONS.map((q) => q.id);
-  const { questions, currentIndex, goToQuestion } = useExam(questionIds);
+  const { session, loading } = useExamSession(examId);
+  const questionIds = session?.questionIds ?? [];
+
+  const questions = useMemo(
+    () =>
+      questionIds.map((id) => ({
+        questionId: id,
+        isAnswered: !!session?.responses?.[id],
+        isFlagged: session?.flags?.has(id) ?? false,
+      })),
+    [questionIds, session?.responses, session?.flags]
+  );
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const goToQuestion = useCallback(
+    (i: number) => setCurrentIndex(Math.max(0, Math.min(i, questions.length - 1))),
+    [questions.length]
+  );
 
   const handleSubmit = () => {
     router.push(`/exam/${examId}/results`);
   };
+
+  if (loading) {
+    return (
+      <div className="p-6 lg:p-8 max-w-xl mx-auto">
+        <h1 className="font-heading text-2xl font-bold text-slate-900 dark:text-white">
+          Exam Review
+        </h1>
+        <p className="text-slate-500 dark:text-slate-400 mt-4">Loading...</p>
+      </div>
+    );
+  }
+
+  if (questionIds.length === 0) {
+    return (
+      <div className="p-6 lg:p-8 max-w-xl mx-auto">
+        <h1 className="font-heading text-2xl font-bold text-slate-900 dark:text-white">
+          Exam Review
+        </h1>
+        <p className="text-slate-500 dark:text-slate-400 mt-4">
+          No content available yet for your track. Start an exam from the exam page to review answers.
+        </p>
+        <Link
+          href={`/exam/${examId}`}
+          className="inline-flex mt-4 px-4 py-2 rounded-lg bg-indigo-600 text-white font-medium hover:bg-indigo-700"
+        >
+          Back to Exam
+        </Link>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 lg:p-8 space-y-6">

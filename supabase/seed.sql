@@ -1,7 +1,15 @@
 -- =============================================================================
 -- Seed Data (Optional - run after migrations)
 -- =============================================================================
--- Essential lookup data for the platform to function.
+-- Essential lookup data for app boot. Valid PostgreSQL SQL only (no psql metacommands).
+-- Runs during supabase db reset. Keeps system in clean zero-content state.
+--
+-- Extended content (questions, flashcards, videos, etc.) is NOT seeded here.
+-- To add demo content, run manually:
+--   psql $DATABASE_URL -f supabase/seed_extended.sql
+--   psql $DATABASE_URL -f supabase/seed_foundational.sql
+--   psql $DATABASE_URL -f supabase/seed_starter.sql
+-- Or merge needed SQL into a migration.
 -- =============================================================================
 
 -- -----------------------------------------------------------------------------
@@ -42,6 +50,3 @@ INSERT INTO admin_roles (slug, name, description) VALUES
   ('support', 'Support', 'View user data, assist support'),
   ('analytics_viewer', 'Analytics Viewer', 'Read-only analytics access')
 ON CONFLICT (slug) DO NOTHING;
-
--- Extended seed: systems, topics, questions, guides, flashcards, videos, AI templates
-\ir seed_extended.sql

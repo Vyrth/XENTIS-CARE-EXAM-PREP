@@ -11,6 +11,7 @@ export interface HighYieldCardProps {
   topic: HighYieldTopic;
   practiceHref?: string;
   studyHref?: string;
+  guideHref?: string;
   showWhy?: boolean;
 }
 
@@ -18,6 +19,7 @@ export function HighYieldCard({
   topic,
   practiceHref,
   studyHref,
+  guideHref,
   showWhy = true,
 }: HighYieldCardProps) {
   const tier =
@@ -62,7 +64,16 @@ export function HighYieldCard({
               {Icons.chevronRight}
             </Link>
           )}
-          {studyHref && (
+          {guideHref && (
+            <Link
+              href={guideHref}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200 text-sm font-medium hover:bg-amber-200 dark:hover:bg-amber-900/50"
+            >
+              Open guide
+              {Icons.chevronRight}
+            </Link>
+          )}
+          {studyHref && !guideHref && (
             <Link
               href={studyHref}
               className="inline-flex items-center px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-800"
