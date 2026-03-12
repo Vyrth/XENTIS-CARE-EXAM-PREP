@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { ADMIN_ROUTES } from "@/config/admin-routes";
 import { createServiceClient } from "@/lib/supabase/service";
 import { isSupabaseServiceRoleConfigured } from "@/lib/supabase/env";
 import { canTransition } from "@/lib/admin/workflow";
@@ -135,14 +136,14 @@ export async function transitionContentStatus(
     }
   }
 
-  revalidatePath("/admin/review-queue");
-  revalidatePath("/admin/review-queue/[lane]");
-  revalidatePath("/admin/publish-queue");
-  revalidatePath(`/admin/questions/${entityId}`);
-  revalidatePath(`/admin/study-guides/${entityId}`);
-  revalidatePath(`/admin/videos/${entityId}`);
-  revalidatePath(`/admin/flashcards/${entityId}`);
-  revalidatePath(`/admin/high-yield/${entityId}`);
+  revalidatePath(ADMIN_ROUTES.REVIEW_QUEUE);
+  revalidatePath(`${ADMIN_ROUTES.REVIEW_QUEUE}/[lane]`);
+  revalidatePath(ADMIN_ROUTES.PUBLISH_QUEUE);
+  revalidatePath(`${ADMIN_ROUTES.QUESTIONS}/${entityId}`);
+  revalidatePath(`${ADMIN_ROUTES.STUDY_GUIDES}/${entityId}`);
+  revalidatePath(`${ADMIN_ROUTES.VIDEOS}/${entityId}`);
+  revalidatePath(`${ADMIN_ROUTES.FLASHCARDS}/${entityId}`);
+  revalidatePath(`${ADMIN_ROUTES.HIGH_YIELD}/${entityId}`);
 
   // Revalidate learner pages when content becomes published.
   // Use "layout" so nested routes (e.g. /questions/system/[slug], /study-guides/[id]) revalidate on next visit.
@@ -170,11 +171,11 @@ export async function addContentReviewNote(
 ): Promise<{ success: boolean; error?: string }> {
   const r = await addReviewNote(entityType, entityId, userId, roleSlug, content);
   if (r.success) {
-    revalidatePath("/admin/review-queue");
-    revalidatePath(`/admin/questions/${entityId}`);
-    revalidatePath(`/admin/study-guides/${entityId}`);
-    revalidatePath(`/admin/videos/${entityId}`);
-    revalidatePath(`/admin/flashcards/${entityId}`);
+    revalidatePath(ADMIN_ROUTES.REVIEW_QUEUE);
+    revalidatePath(`${ADMIN_ROUTES.QUESTIONS}/${entityId}`);
+    revalidatePath(`${ADMIN_ROUTES.STUDY_GUIDES}/${entityId}`);
+    revalidatePath(`${ADMIN_ROUTES.VIDEOS}/${entityId}`);
+    revalidatePath(`${ADMIN_ROUTES.FLASHCARDS}/${entityId}`);
   }
   return r;
 }

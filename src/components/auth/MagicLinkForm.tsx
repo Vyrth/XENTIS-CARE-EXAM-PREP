@@ -7,9 +7,11 @@ import { getAuthCallbackUrl } from "@/lib/auth/url";
 export type MagicLinkFormProps = {
   onError?: (message: string) => void;
   onSuccess?: () => void;
+  /** Redirect path after magic link (default: /dashboard) */
+  redirectTo?: string;
 };
 
-export function MagicLinkForm({ onError, onSuccess }: MagicLinkFormProps) {
+export function MagicLinkForm({ onError, onSuccess, redirectTo = "/dashboard" }: MagicLinkFormProps) {
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
@@ -24,7 +26,7 @@ export function MagicLinkForm({ onError, onSuccess }: MagicLinkFormProps) {
       const { error } = await supabase.auth.signInWithOtp({
         email: email.trim(),
         options: {
-          emailRedirectTo: getAuthCallbackUrl("/onboarding"),
+          emailRedirectTo: getAuthCallbackUrl(redirectTo),
         },
       });
       if (error) {

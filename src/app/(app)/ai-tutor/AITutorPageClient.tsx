@@ -54,14 +54,23 @@ export function AITutorPageClient({ track, weakAreas, nextStepSuggestions }: AIT
 
   return (
     <div className="p-6 lg:p-8 h-[calc(100vh-4rem)] flex flex-col">
-      <h1 className="font-heading text-2xl font-bold text-slate-900 dark:text-white mb-2">
-        Jade Tutor
-      </h1>
-      <p className="text-slate-600 dark:text-slate-400 mb-6">
-        Your board-focused study coach for explanations, mnemonics, weak-area support, and high-yield review.
-      </p>
+      <div className="mb-6">
+        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-violet-500/10 dark:bg-violet-400/10 text-violet-700 dark:text-violet-300 text-sm font-medium mb-3">
+          <span className="relative flex h-2 w-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-violet-400 opacity-75" />
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-violet-500" />
+          </span>
+          AI study partner
+        </div>
+        <h1 className="font-heading text-3xl font-bold text-slate-900 dark:text-white">
+          Jade Tutor
+        </h1>
+        <p className="mt-2 text-slate-600 dark:text-slate-400">
+          Your board-focused study coach for explanations, mnemonics, weak-area support, and high-yield review.
+        </p>
+      </div>
 
-      <Card className="flex-1 flex flex-col min-h-0 overflow-hidden">
+      <Card variant="elevated" className="flex-1 flex flex-col min-h-0 overflow-hidden border-violet-200/50 dark:border-violet-800/30">
         <AITutorChat
           track={track}
           initialContext={contextFromUrl || undefined}

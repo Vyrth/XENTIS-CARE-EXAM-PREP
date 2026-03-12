@@ -1,7 +1,9 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { syncProfileFromAuth, getProfile } from "@/lib/auth/profile";
-import { getAuthBaseUrl } from "@/lib/auth/url";
+import { isAdmin } from "@/lib/auth/admin";
+import { getAuthBaseUrl, getSafeRedirectPath } from "@/lib/auth/url";
+import { ADMIN_BASE } from "@/config/admin-routes";
 
 /**
  * Auth callback handler. Supabase redirects here after:
@@ -9,7 +11,7 @@ import { getAuthBaseUrl } from "@/lib/auth/url";
  * - Magic link (email)
  *
  * Exchanges code for session, syncs profile, and redirects to app.
- * New users (no onboarding_completed_at) go to /onboarding; others to /dashboard.
+ * Validates `next` param to prevent open redirect.
  */
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -35,11 +37,21 @@ export async function GET(request: Request) {
     avatar_url: data.user.user_metadata?.avatar_url ?? undefined,
   });
 
-  // New users: onboarding. Returning users: dashboard (or next)
+  // Validated next param overrides default (prevents open redirect)
+  const safeNext = getSafeRedirectPath(nextParam);
+  if (safeNext) {
+    return NextResponse.redirect(`${baseUrl}${safeNext}`);
+  }
+
+  // Default: admins -> /admin; new users -> /onboarding; returning learners -> /dashboard
+  const userIsAdmin = await isAdmin(data.user.id);
+  if (userIsAdmin) {
+    return NextResponse.redirect(`${baseUrl}${ADMIN_BASE}`);
+  }
+
   const profile = await getProfile(data.user.id);
   const needsOnboarding = !profile?.onboarding_completed_at;
-  const redirectPath =
-    nextParam ?? (needsOnboarding ? "/onboarding" : "/dashboard");
+  const redirectPath = needsOnboarding ? "/onboarding" : "/dashboard";
 
   return NextResponse.redirect(`${baseUrl}${redirectPath}`);
 }

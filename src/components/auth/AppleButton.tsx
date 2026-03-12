@@ -6,9 +6,11 @@ import { getAuthCallbackUrl } from "@/lib/auth/url";
 
 export type AppleButtonProps = {
   onError?: (message: string) => void;
+  /** Redirect path after OAuth (default: /dashboard) */
+  redirectTo?: string;
 };
 
-export function AppleButton({ onError }: AppleButtonProps) {
+export function AppleButton({ onError, redirectTo = "/dashboard" }: AppleButtonProps) {
   const [loading, setLoading] = useState(false);
 
   const handleClick = async () => {
@@ -19,7 +21,7 @@ export function AppleButton({ onError }: AppleButtonProps) {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "apple",
         options: {
-          redirectTo: getAuthCallbackUrl("/onboarding"),
+          redirectTo: getAuthCallbackUrl(redirectTo),
         },
       });
       if (error) {

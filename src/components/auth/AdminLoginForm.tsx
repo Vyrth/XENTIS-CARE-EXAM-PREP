@@ -3,7 +3,12 @@
 import { useState } from "react";
 import { EmailPasswordForm } from "./EmailPasswordForm";
 
-export function AdminLoginForm() {
+export type AdminLoginFormProps = {
+  /** Where to redirect after successful admin sign-in (default: /admin) */
+  returnTo?: string;
+};
+
+export function AdminLoginForm({ returnTo = "/admin" }: AdminLoginFormProps) {
   const [error, setError] = useState<string | null>(null);
 
   return (
@@ -18,7 +23,7 @@ export function AdminLoginForm() {
       )}
       <EmailPasswordForm
         onError={setError}
-        redirectTo="/admin"
+        redirectTo={returnTo}
       />
     </div>
   );

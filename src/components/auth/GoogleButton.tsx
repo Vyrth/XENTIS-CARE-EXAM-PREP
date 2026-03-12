@@ -6,9 +6,11 @@ import { getAuthCallbackUrl } from "@/lib/auth/url";
 
 export type GoogleButtonProps = {
   onError?: (message: string) => void;
+  /** Redirect path after OAuth (default: /dashboard) */
+  redirectTo?: string;
 };
 
-export function GoogleButton({ onError }: GoogleButtonProps) {
+export function GoogleButton({ onError, redirectTo = "/dashboard" }: GoogleButtonProps) {
   const [loading, setLoading] = useState(false);
 
   const handleClick = async () => {
@@ -19,7 +21,7 @@ export function GoogleButton({ onError }: GoogleButtonProps) {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo: getAuthCallbackUrl("/onboarding"),
+          redirectTo: getAuthCallbackUrl(redirectTo),
         },
       });
       if (error) {

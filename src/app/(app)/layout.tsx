@@ -1,14 +1,16 @@
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth/session";
 import { getProfile } from "@/lib/auth/profile";
 import { getPrimaryTrack, clearOrphanedPrimaryTrack } from "@/lib/auth/track";
 import { AUTH_ROUTES } from "@/config/auth";
+import { isAdminRoute } from "@/config/admin-routes";
 import { AppShell } from "@/components/layout/AppShell";
 
 /**
  * Protected app layout. All routes under (app) require authentication.
  * Redirects to onboarding if profile onboarding not completed or no track set.
- * Verifies track exists (handles orphaned FK); clears and redirects if not.
+ * Admin routes (/admin/*) skip track requirement; AdminLayout enforces admin role.
  */
 export const dynamic = "force-dynamic";
 
@@ -23,14 +25,23 @@ export default async function AppLayout({
   const profile = await getProfile(user.id);
   if (!profile) redirect(AUTH_ROUTES.LOGIN);
 
+  const pathname = (await headers()).get("x-pathname") ?? "";
+  const onAdminRoute = isAdminRoute(pathname);
+
   if (process.env.NODE_ENV === "development") {
     console.log("[guard] onboarding status", {
       onboarding_completed_at: !!profile.onboarding_completed_at,
       primary_exam_track_id: profile.primary_exam_track_id ?? "null",
+      onAdminRoute,
     });
   }
 
-  // First-time users: redirect to onboarding
+  // Admin routes: skip onboarding/track; AdminLayout enforces admin role and redirects non-admins
+  if (onAdminRoute) {
+    return <AppShell>{children}</AppShell>;
+  }
+
+  // Learner routes: require onboarding
   if (!profile.onboarding_completed_at) {
     if (process.env.NODE_ENV === "development") {
       console.log("[guard] redirecting to onboarding (incomplete)");
@@ -38,7 +49,7 @@ export default async function AppLayout({
     redirect(AUTH_ROUTES.ONBOARDING);
   }
 
-  // Track required: redirect if primary_exam_track_id not set
+  // Track required for learner routes
   if (!profile.primary_exam_track_id) {
     if (process.env.NODE_ENV === "development") {
       console.log("[guard] redirecting to onboarding (no track)");

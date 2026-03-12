@@ -1,23 +1,17 @@
-import { redirect } from "next/navigation";
-import { getSessionUser } from "@/lib/auth/session";
-import { isAdmin } from "@/lib/auth/admin";
-import { AUTH_ROUTES } from "@/config/auth";
+import { requireAdmin } from "@/lib/auth/require-admin";
 
 /**
- * Admin layout. Requires auth + admin role.
+ * Admin layout. Requires auth + admin role via canonical guard.
+ * force-dynamic prevents stale admin-role reads.
  */
+export const dynamic = "force-dynamic";
+
 export default async function AdminLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const user = await getSessionUser();
-  if (!user) redirect(AUTH_ROUTES.LOGIN);
-
-  const userIsAdmin = await isAdmin(user.id);
-  if (!userIsAdmin) {
-    redirect("/dashboard");
-  }
+  await requireAdmin();
 
   return (
     <div className="min-h-screen">

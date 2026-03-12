@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
+import { ADMIN_ROUTES } from "@/config/admin-routes";
 import { getSessionUser } from "@/lib/auth/session";
 import { isAdmin } from "@/lib/auth/admin";
 import { createServiceClient } from "@/lib/supabase/service";
@@ -55,11 +56,11 @@ export async function POST(req: Request) {
     }
 
     // Revalidate admin and learner pages so counts show 0 / empty states
-    revalidatePath("/admin");
-    revalidatePath("/admin/review-queue");
-    revalidatePath("/admin/publish-queue");
-    revalidatePath("/admin/content-inventory");
-    revalidatePath("/admin/ai-factory");
+    revalidatePath(ADMIN_ROUTES.OVERVIEW);
+    revalidatePath(ADMIN_ROUTES.REVIEW_QUEUE);
+    revalidatePath(ADMIN_ROUTES.PUBLISH_QUEUE);
+    revalidatePath(ADMIN_ROUTES.CONTENT_INVENTORY);
+    revalidatePath(ADMIN_ROUTES.AI_FACTORY);
     revalidatePath("/questions");
     revalidatePath("/study-guides");
     revalidatePath("/flashcards");

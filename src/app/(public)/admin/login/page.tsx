@@ -1,19 +1,28 @@
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth/session";
 import { isAdmin } from "@/lib/auth/admin";
+import { getAdminRedirectTarget } from "@/config/admin-routes";
+import { getSafeRedirectPath } from "@/lib/auth/url";
 import { AdminLoginForm } from "@/components/auth/AdminLoginForm";
 
 /**
  * Admin login entry point.
- * - If not authenticated: show email/password form
- * - If authenticated and admin: redirect to /admin
+ * - If not authenticated: show email/password form with returnTo
+ * - If authenticated and admin: redirect to returnTo or /admin
  * - If authenticated but not admin: redirect to /dashboard
  */
-export default async function AdminLoginPage() {
+export default async function AdminLoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ returnTo?: string }>;
+}) {
+  const params = await searchParams;
+  const returnTo = getSafeRedirectPath(params.returnTo ?? null) ?? getAdminRedirectTarget();
+
   const user = await getSessionUser();
   if (user) {
     const userIsAdmin = await isAdmin(user.id);
-    if (userIsAdmin) redirect("/admin");
+    if (userIsAdmin) redirect(returnTo);
     redirect("/dashboard");
   }
 
@@ -28,7 +37,7 @@ export default async function AdminLoginPage() {
             Xentis Care Exam Prep — CMS & content management
           </p>
         </div>
-        <AdminLoginForm />
+        <AdminLoginForm returnTo={returnTo} />
         <p className="mt-6 text-center text-sm text-slate-500 dark:text-slate-400">
           <a href="/login" className="text-indigo-600 dark:text-indigo-400 hover:underline">
             ← Back to student login

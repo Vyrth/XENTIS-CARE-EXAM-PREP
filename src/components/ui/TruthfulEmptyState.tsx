@@ -33,22 +33,22 @@ export function TruthfulEmptyState({
 }: TruthfulEmptyStateProps) {
   const IconComponent = Icons[icon];
   return (
-    <div className="flex flex-col items-center justify-center py-12 px-4 text-center rounded-lg border border-dashed border-slate-300 dark:border-slate-600 bg-slate-50/50 dark:bg-slate-900/30">
-      <div className="mb-4 text-slate-400 dark:text-slate-500 [&>svg]:w-12 [&>svg]:h-12">
+    <div className="flex flex-col items-center justify-center py-14 px-6 text-center rounded-2xl border border-slate-200/80 dark:border-slate-700 bg-white/60 dark:bg-slate-900/40 backdrop-blur-sm shadow-card-premium">
+      <div className="mb-4 w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-500/15 to-violet-500/15 dark:from-indigo-400/20 dark:to-violet-400/20 flex items-center justify-center text-indigo-600 dark:text-indigo-400 [&>svg]:w-8 [&>svg]:h-8">
         {IconComponent}
       </div>
-      <h3 className="text-base font-medium text-slate-900 dark:text-white">{title}</h3>
+      <h3 className="text-lg font-semibold text-slate-900 dark:text-white">{title}</h3>
       {description && (
-        <p className="mt-1 text-sm text-slate-600 dark:text-slate-400 max-w-sm">
+        <p className="mt-2 text-sm text-slate-600 dark:text-slate-400 max-w-sm">
           {description}
         </p>
       )}
       {(action || actionElement) && (
-        <div className="mt-4">
+        <div className="mt-6">
           {action ? (
             <Link
               href={action.href}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-700 transition-colors"
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-500/25"
             >
               {action.label}
               {Icons.chevronRight}

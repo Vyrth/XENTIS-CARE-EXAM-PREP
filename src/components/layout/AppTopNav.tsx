@@ -9,7 +9,7 @@ type AppTopNavProps = {
 
 export function AppTopNav({ onMenuClick, title }: AppTopNavProps) {
   return (
-    <header className="sticky top-0 z-30 flex h-16 items-center gap-4 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-4 lg:px-8">
+    <header className="sticky top-0 z-30 flex h-16 items-center gap-4 border-b border-slate-200/80 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm px-4 lg:px-8">
       <button
         type="button"
         onClick={onMenuClick}

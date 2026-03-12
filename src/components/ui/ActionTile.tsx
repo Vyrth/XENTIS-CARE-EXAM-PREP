@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ReactNode } from "react";
+import { Badge } from "@/components/ui/Badge";
 
 type ActionTileProps = {
   href?: string;
@@ -32,7 +33,7 @@ export function ActionTile({
   const content = (
     <>
       {icon && (
-        <div className="flex-shrink-0 w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-600 dark:text-slate-400">
+        <div className="flex-shrink-0 w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500/10 to-violet-500/10 dark:from-indigo-400/15 dark:to-violet-400/15 flex items-center justify-center text-indigo-600 dark:text-indigo-400 [&>svg]:w-5 [&>svg]:h-5">
           {icon}
         </div>
       )}
@@ -42,9 +43,9 @@ export function ActionTile({
             {title}
           </span>
           {badge && (
-            <span className="flex-shrink-0 px-2 py-0.5 text-xs font-medium rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
+            <Badge variant="neutral" size="sm" className="flex-shrink-0">
               {badge}
-            </span>
+            </Badge>
           )}
         </div>
         {description && (
@@ -57,10 +58,12 @@ export function ActionTile({
   );
 
   const baseClass = `
-    flex items-start gap-4 p-5 rounded-card
-    bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800
+    flex items-start gap-4 p-5 rounded-card-lg
+    bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm
+    border border-slate-200/80 dark:border-slate-800/80
+    shadow-card-premium hover:shadow-card-premium-hover
     transition-all duration-200
-    hover:shadow-card-hover hover:border-slate-300 dark:hover:border-slate-700
+    hover:border-indigo-200/80 dark:hover:border-indigo-800/50
     focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-900
     ${trackColor ? `border-l-4 ${trackAccentClasses[trackColor]}` : ""}
     ${className}

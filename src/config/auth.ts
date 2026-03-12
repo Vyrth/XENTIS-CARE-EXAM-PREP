@@ -19,7 +19,7 @@ export const PROTECTED_ROUTES = {
   AI_TUTOR: "/ai-tutor",
 } as const;
 
-export const ADMIN_ROUTE_PREFIX = "/admin";
+export { ADMIN_BASE as ADMIN_ROUTE_PREFIX } from "./admin-routes";
 
 export const EXAM_TRACKS = [
   { slug: "lvn", name: "LVN/LPN" },

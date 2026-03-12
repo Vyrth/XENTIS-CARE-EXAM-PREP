@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { ADMIN_ROUTES } from "@/config/admin-routes";
 import { withAdminAIGuard } from "@/lib/auth/admin-ai-guard";
 import {
   createBatchJob,
@@ -235,7 +236,7 @@ export async function launchAIFactoryBatchAction(
     });
   }
 
-  revalidatePath("/admin/ai-factory");
+  revalidatePath(ADMIN_ROUTES.AI_FACTORY);
   return { success: true, jobId, campaignId, batchPlanIds, shardIds };
 }
 

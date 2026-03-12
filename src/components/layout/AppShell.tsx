@@ -47,10 +47,11 @@ export function AppShell({ children, title }: AppShellProps) {
         collapsed={sidebarCollapsed}
         onToggleCollapsed={toggleCollapsed}
       />
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 relative">
         <AppTopNav onMenuClick={toggleSidebar} title={title} />
-        <main id="main" className="flex-1 overflow-auto" tabIndex={-1}>
-          {children}
+        <main id="main" className="flex-1 overflow-auto relative" tabIndex={-1}>
+          <div className="absolute inset-0 bg-gradient-learner pointer-events-none min-h-full" aria-hidden />
+          <div className="relative min-h-full">{children}</div>
         </main>
       </div>
       <BetaFeedbackButton />

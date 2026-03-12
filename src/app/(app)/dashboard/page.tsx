@@ -3,7 +3,9 @@ import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth/session";
 import { getProfile } from "@/lib/auth/profile";
 import { getPrimaryTrack, requirePrimaryTrack, clearOrphanedPrimaryTrack } from "@/lib/auth/track";
+import Link from "next/link";
 import { Card } from "@/components/ui/Card";
+import { Badge } from "@/components/ui/Badge";
 import { StatBlock } from "@/components/ui/StatBlock";
 import { ActionTile } from "@/components/ui/ActionTile";
 import { DashboardReadinessClient } from "@/components/dashboard/DashboardReadinessClient";
@@ -135,18 +137,24 @@ export default async function DashboardPage() {
   ];
 
   return (
-    <div className="p-6 lg:p-8 space-y-8">
-      <div>
-        <h1 className="font-heading text-2xl font-bold text-slate-900 dark:text-white">
-          Dashboard
-        </h1>
-        <p className="mt-1 text-slate-600 dark:text-slate-400">
-          Welcome back{profile?.full_name ? `, ${profile.full_name}` : ""}
-          {primary ? ` — ${track.toUpperCase()} track` : ""}
-        </p>
+    <div className="p-6 lg:p-8 space-y-10">
+      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+        <div>
+          <h1 className="font-heading text-3xl sm:text-4xl font-bold text-slate-900 dark:text-white tracking-tight">
+            Dashboard
+          </h1>
+          <p className="mt-2 text-lg text-slate-600 dark:text-slate-400">
+            Welcome back{profile?.full_name ? `, ${profile.full_name}` : ""}
+          </p>
+          {primary && (
+            <Badge variant="default" size="sm" className="mt-2">
+              {track.toUpperCase()} track
+            </Badge>
+          )}
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
         {statsBlocks.map((stat) => (
           <StatBlock
             key={stat.label}
@@ -159,11 +167,11 @@ export default async function DashboardPage() {
       </div>
 
       <div>
-        <h2 className="font-heading font-semibold text-slate-900 dark:text-white mb-4">
+        <h2 className="font-heading text-xl font-semibold text-slate-900 dark:text-white mb-5">
           Continue Learning
         </h2>
         {continueLearningCards.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             {continueLearningCards.map((action) => (
               <ActionTile
                 key={action.href + action.title}
@@ -177,17 +185,38 @@ export default async function DashboardPage() {
             ))}
           </div>
         ) : (
-          <Card>
-            <div className="text-center py-8">
-              <p className="text-slate-500 dark:text-slate-400">
-                No recommendations yet. Explore practice questions and study guides to get started.
+          <Card variant="elevated" className="overflow-hidden rounded-card-lg">
+            <div className="flex flex-col items-center justify-center py-12 px-6 text-center">
+              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-500/15 to-violet-500/15 dark:from-indigo-400/20 dark:to-violet-400/20 flex items-center justify-center mb-4 [&>svg]:w-8 [&>svg]:h-8 text-indigo-600 dark:text-indigo-400">
+                {Icons["sparkles"]}
+              </div>
+              <h3 className="font-heading text-lg font-semibold text-slate-900 dark:text-white">
+                No recommendations yet
+              </h3>
+              <p className="mt-2 text-slate-600 dark:text-slate-400 max-w-sm">
+                Explore practice questions and study guides to get started and build your readiness.
               </p>
-              <a
-                href="/questions"
-                className="mt-3 inline-flex items-center gap-2 text-sm font-medium text-primary hover:underline"
-              >
-                Practice questions
-              </a>
+              <div className="mt-6 flex flex-wrap gap-3 justify-center">
+                <Link
+                  href="/questions"
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-semibold text-sm shadow-lg shadow-indigo-500/25 hover:shadow-indigo-500/40 transition-all duration-300"
+                >
+                  Practice questions
+                  {Icons.chevronRight}
+                </Link>
+                <Link
+                  href="/study-guides"
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl border-2 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-semibold text-sm hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-all duration-300"
+                >
+                  Study guides
+                </Link>
+                <Link
+                  href="/pre-practice"
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl border-2 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-semibold text-sm hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-all duration-300"
+                >
+                  Pre-practice exam
+                </Link>
+              </div>
             </div>
           </Card>
         )}
@@ -225,14 +254,27 @@ export default async function DashboardPage() {
       {highYieldTopics.length > 0 ? (
         <HighYieldStudyFeed topics={highYieldTopics} track={track} maxItems={5} />
       ) : (
-        <Card>
-          <div className="text-center py-8">
-            <p className="text-slate-500 dark:text-slate-400">
-              High-yield topics will appear here as content is added for {getTrackDisplayName(track)}.
+        <Card variant="elevated" className="overflow-hidden rounded-card-lg">
+          <div className="flex flex-col items-center justify-center py-12 px-6 text-center">
+            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-amber-500/15 to-cyan-500/15 dark:from-amber-400/20 dark:to-cyan-400/20 flex items-center justify-center mb-4 [&>svg]:w-8 [&>svg]:h-8 text-amber-600 dark:text-amber-400">
+              {Icons["layers"]}
+            </div>
+            <h3 className="font-heading text-lg font-semibold text-slate-900 dark:text-white">
+              High-yield topics coming soon
+            </h3>
+            <p className="mt-2 text-slate-600 dark:text-slate-400 max-w-sm">
+              Content will appear here as it&apos;s added for {getTrackDisplayName(track)}.
             </p>
-            <p className="text-sm text-slate-400 mt-1">
+            <p className="mt-1 text-sm text-slate-500 dark:text-slate-500">
               Focus on practice questions and study guides to build your readiness.
             </p>
+            <Link
+              href="/questions"
+              className="mt-6 inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-semibold text-sm shadow-lg shadow-indigo-500/25 hover:shadow-indigo-500/40 transition-all duration-300"
+            >
+              Practice questions
+              {Icons.chevronRight}
+            </Link>
           </div>
         </Card>
       )}

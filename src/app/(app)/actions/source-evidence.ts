@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { ADMIN_ROUTES } from "@/config/admin-routes";
 import { createServiceClient } from "@/lib/supabase/service";
 import { isSupabaseServiceRoleConfigured } from "@/lib/supabase/env";
 import type { SourceBasis, LegalStatus } from "@/lib/admin/source-evidence";
@@ -47,13 +48,13 @@ export async function saveSourceEvidence(
 
     if (error) return { success: false, error: error.message };
 
-    revalidatePath(`/admin/questions/${contentId}`);
-    revalidatePath(`/admin/study-guides/${contentId}`);
-    revalidatePath(`/admin/videos/${contentId}`);
-    revalidatePath(`/admin/flashcards/${contentId}`);
-    revalidatePath(`/admin/high-yield/${contentId}`);
-    revalidatePath(`/admin/exams/templates/${contentId}`);
-    revalidatePath(`/admin/exams/system/${contentId}`);
+    revalidatePath(`${ADMIN_ROUTES.QUESTIONS}/${contentId}`);
+    revalidatePath(`${ADMIN_ROUTES.STUDY_GUIDES}/${contentId}`);
+    revalidatePath(`${ADMIN_ROUTES.VIDEOS}/${contentId}`);
+    revalidatePath(`${ADMIN_ROUTES.FLASHCARDS}/${contentId}`);
+    revalidatePath(`${ADMIN_ROUTES.HIGH_YIELD}/${contentId}`);
+    revalidatePath(`${ADMIN_ROUTES.EXAMS_TEMPLATES}/${contentId}`);
+    revalidatePath(`${ADMIN_ROUTES.EXAMS_SYSTEM}/${contentId}`);
 
     return { success: true };
   } catch (e) {
@@ -89,13 +90,13 @@ export async function saveContentSourceLinks(
       if (error) return { success: false, error: error.message };
     }
 
-    revalidatePath(`/admin/questions/${contentId}`);
-    revalidatePath(`/admin/study-guides/${contentId}`);
-    revalidatePath(`/admin/videos/${contentId}`);
-    revalidatePath(`/admin/flashcards/${contentId}`);
-    revalidatePath(`/admin/high-yield/${contentId}`);
-    revalidatePath(`/admin/exams/templates/${contentId}`);
-    revalidatePath(`/admin/exams/system/${contentId}`);
+    revalidatePath(`${ADMIN_ROUTES.QUESTIONS}/${contentId}`);
+    revalidatePath(`${ADMIN_ROUTES.STUDY_GUIDES}/${contentId}`);
+    revalidatePath(`${ADMIN_ROUTES.VIDEOS}/${contentId}`);
+    revalidatePath(`${ADMIN_ROUTES.FLASHCARDS}/${contentId}`);
+    revalidatePath(`${ADMIN_ROUTES.HIGH_YIELD}/${contentId}`);
+    revalidatePath(`${ADMIN_ROUTES.EXAMS_TEMPLATES}/${contentId}`);
+    revalidatePath(`${ADMIN_ROUTES.EXAMS_SYSTEM}/${contentId}`);
 
     return { success: true };
   } catch (e) {

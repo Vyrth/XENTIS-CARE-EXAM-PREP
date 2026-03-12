@@ -56,8 +56,8 @@ export function LoginForm({ initialError, redirectTo = "/dashboard" }: LoginForm
           </div>
         </div>
 
-        <GoogleButton onError={setError} />
-        <AppleButton onError={setError} />
+        <GoogleButton onError={setError} redirectTo={redirectTo} />
+        <AppleButton onError={setError} redirectTo={redirectTo} />
 
         <div className="relative">
           <div className="absolute inset-0 flex items-center">
@@ -68,7 +68,7 @@ export function LoginForm({ initialError, redirectTo = "/dashboard" }: LoginForm
           </div>
         </div>
 
-        <MagicLinkForm onError={setError} />
+        <MagicLinkForm onError={setError} redirectTo={redirectTo} />
       </div>
 
       <p className="mt-6 text-center text-sm text-slate-500 dark:text-slate-400">

@@ -23,7 +23,7 @@ async function callChat(
   const openai = getOpenAIClient();
   if (!openai) {
     return {
-      content: "Jade Tutor requires OPENAI_API_KEY to be configured. Add it to your environment to use the AI tutor.",
+      content: "Jade Tutor requires OPENAI_API_KEY to be configured. Add it to your environment to use Jade Tutor.",
       promptTokens: 0,
       completionTokens: 0,
     };

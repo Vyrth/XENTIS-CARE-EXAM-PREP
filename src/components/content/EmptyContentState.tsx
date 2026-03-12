@@ -57,9 +57,12 @@ export function EmptyContentState({
   const suggestions = COMING_NEXT_LINKS[contentType] ?? [];
 
   return (
-    <Card className="border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-900/10">
-      <div className="text-center py-12">
-        <span className="inline-block text-4xl mb-4 text-slate-400">{Icons[icon]}</span>
+    <Card variant="elevated" padding="none" className="overflow-hidden border-amber-200/60 dark:border-amber-800/40 bg-amber-50/30 dark:bg-amber-900/5">
+      <div className="h-1 bg-gradient-to-r from-amber-500/20 to-cyan-500/20 rounded-t-card" />
+      <div className="text-center py-12 px-6">
+        <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-amber-500/15 to-cyan-500/15 dark:from-amber-400/20 dark:to-cyan-400/20 flex items-center justify-center mx-auto mb-4 text-amber-600 dark:text-amber-400 [&>svg]:w-8 [&>svg]:h-8">
+          {Icons[icon]}
+        </div>
         <h2 className="font-heading text-lg font-semibold text-slate-900 dark:text-white mb-2">
           {title}
         </h2>
@@ -74,7 +77,7 @@ export function EmptyContentState({
             <Link
               key={s.href}
               href={s.href}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-700 transition-colors"
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-500/25"
             >
               {s.label}
               {Icons.chevronRight}

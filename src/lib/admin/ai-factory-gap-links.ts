@@ -3,6 +3,8 @@
  * Build URLs for one-click jump from coverage gaps to prefilled generation forms.
  */
 
+import { ADMIN_ROUTES } from "@/config/admin-routes";
+
 export type AIFactoryTab = "questions" | "study-guides" | "flashcards" | "high-yield" | "batch";
 
 export interface AIFactoryPrefillParams {
@@ -21,7 +23,7 @@ export function buildAIFactoryUrl(params: AIFactoryPrefillParams): string {
   if (params.systemId) search.set("systemId", params.systemId);
   if (params.topicId) search.set("topicId", params.topicId);
   if (params.domainId) search.set("domainId", params.domainId);
-  return `/admin/ai-factory?${search.toString()}`;
+  return `${ADMIN_ROUTES.AI_FACTORY}?${search.toString()}`;
 }
 
 /** Generate links for a low-coverage system: Questions, Guide, Flashcards, High-Yield */

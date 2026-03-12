@@ -1,5 +1,12 @@
 import { NextResponse, NextRequest } from "next/server";
 import { updateSession } from "@/lib/supabase/middleware";
+import {
+  ADMIN_LOGIN,
+  getAdminRedirectTarget,
+  isAdminRoute,
+  isBadAdminPath,
+} from "@/config/admin-routes";
+import { getSafeRedirectPath } from "@/lib/auth/url";
 
 /**
  * Public routes - no auth required
@@ -15,17 +22,12 @@ const PUBLIC_ROUTES = [
 /**
  * Auth routes - sign in, callback (redirect if already authenticated)
  */
-const AUTH_ROUTES = ["/login", "/signup", "/admin/login"];
+const AUTH_ROUTES = ["/login", "/signup", ADMIN_LOGIN];
 
 /**
  * Onboarding - first-time setup (redirect if already completed)
  */
 const ONBOARDING_ROUTE = "/onboarding";
-
-/**
- * Admin routes - require admin role
- */
-const ADMIN_ROUTE_PREFIX = "/admin";
 
 function isPublicRoute(pathname: string): boolean {
   return PUBLIC_ROUTES.some(
@@ -43,16 +45,15 @@ function isOnboardingRoute(pathname: string): boolean {
   return pathname === ONBOARDING_ROUTE || pathname.startsWith(`${ONBOARDING_ROUTE}/`);
 }
 
-function isAdminRoute(pathname: string): boolean {
-  return pathname.startsWith(ADMIN_ROUTE_PREFIX);
-}
-
 function isAuthCallbackRoute(pathname: string): boolean {
   return pathname.startsWith("/auth/callback");
 }
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  if (isBadAdminPath(pathname)) {
+    return NextResponse.redirect(new URL(getAdminRedirectTarget(), request.url));
+  }
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set("x-pathname", pathname);
   const requestWithPathname = new NextRequest(request.url, { headers: requestHeaders });
@@ -71,19 +72,24 @@ export async function middleware(request: NextRequest) {
   // Auth routes (login, signup, admin/login) - allow unauthenticated; redirect authenticated users
   if (isAuthRoute(pathname)) {
     if (user) {
-      if (pathname.startsWith("/admin/login")) {
-        // Admin login: redirect to /admin (layout will redirect to /dashboard if not admin)
-        return NextResponse.redirect(new URL("/admin", request.url));
+      // Admin login: let page handle redirect (admins -> returnTo/admin, non-admins -> dashboard)
+      if (pathname.startsWith(ADMIN_LOGIN)) {
+        return response;
       }
-      const redirectTo =
-        request.nextUrl.searchParams.get("redirectTo") || "/dashboard";
+      const raw = request.nextUrl.searchParams.get("redirectTo");
+      const redirectTo = getSafeRedirectPath(raw) ?? "/dashboard";
       return NextResponse.redirect(new URL(redirectTo, request.url));
     }
     return response;
   }
 
-  // Not authenticated - redirect to login
+  // Not authenticated - redirect to appropriate login
   if (!user) {
+    if (isAdminRoute(pathname)) {
+      const adminLoginUrl = new URL(ADMIN_LOGIN, request.url);
+      adminLoginUrl.searchParams.set("returnTo", pathname);
+      return NextResponse.redirect(adminLoginUrl);
+    }
     const loginUrl = new URL("/login", request.url);
     loginUrl.searchParams.set("redirectTo", pathname);
     return NextResponse.redirect(loginUrl);

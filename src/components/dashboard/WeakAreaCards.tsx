@@ -23,19 +23,22 @@ export function WeakAreaCards({
 
   if (display.length === 0) {
     return (
-      <Card>
-        <div className="text-center py-6">
-          <p className="text-emerald-600 dark:text-emerald-400 font-medium">
+      <Card variant="elevated">
+        <div className="text-center py-8">
+          <div className="w-12 h-12 rounded-xl bg-emerald-500/10 dark:bg-emerald-400/10 flex items-center justify-center mx-auto mb-3 [&>svg]:w-6 [&>svg]:h-6 text-emerald-600 dark:text-emerald-400">
+            {Icons.check}
+          </div>
+          <p className="text-emerald-600 dark:text-emerald-400 font-semibold">
             All areas at target!
           </p>
-          <p className="text-slate-500 text-sm mt-1">Keep up the great work.</p>
+          <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">Keep up the great work.</p>
         </div>
       </Card>
     );
   }
 
   return (
-    <Card>
+    <Card variant="elevated">
       <div className="flex items-center justify-between mb-4">
         <h2 className="font-heading font-semibold text-slate-900 dark:text-white">
           Focus Areas

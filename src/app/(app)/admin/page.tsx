@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Card } from "@/components/ui/Card";
 import { Icons } from "@/components/ui/icons";
+import { ADMIN_ROUTES } from "@/config/admin-routes";
 import { loadAdminOverviewMetrics } from "@/lib/admin/overview-loaders";
 import { ResetContentButton } from "@/components/admin/ResetContentButton";
 
@@ -8,33 +9,33 @@ export default async function AdminOverviewPage() {
   const metrics = await loadAdminOverviewMetrics();
 
   const tiles = [
-    { href: "/admin/ai-factory", label: "AI Content Factory", icon: Icons.sparkles },
-    { href: "/admin/autonomous-operations", label: "Autonomous Operations", icon: Icons.layers },
-    { href: "/admin/curriculum", label: "Curriculum", icon: Icons.book },
-    { href: "/admin/questions", label: "Questions", icon: Icons["help-circle"] },
-    { href: "/admin/study-guides", label: "Study Guides", icon: Icons["book-open"] },
-    { href: "/admin/videos", label: "Videos", icon: Icons.video },
-    { href: "/admin/flashcards", label: "Flashcards", icon: Icons.notebook },
-    { href: "/admin/system-bundles", label: "Bundles", icon: Icons.layers },
+    { href: ADMIN_ROUTES.AI_FACTORY, label: "AI Content Factory", icon: Icons.sparkles },
+    { href: ADMIN_ROUTES.AUTONOMOUS_OPERATIONS, label: "Autonomous Operations", icon: Icons.layers },
+    { href: ADMIN_ROUTES.CURRICULUM, label: "Curriculum", icon: Icons.book },
+    { href: ADMIN_ROUTES.QUESTIONS, label: "Questions", icon: Icons["help-circle"] },
+    { href: ADMIN_ROUTES.STUDY_GUIDES, label: "Study Guides", icon: Icons["book-open"] },
+    { href: ADMIN_ROUTES.VIDEOS, label: "Videos", icon: Icons.video },
+    { href: ADMIN_ROUTES.FLASHCARDS, label: "Flashcards", icon: Icons.notebook },
+    { href: ADMIN_ROUTES.SYSTEM_BUNDLES, label: "Bundles", icon: Icons.layers },
     {
-      href: "/admin/review-queue",
+      href: ADMIN_ROUTES.REVIEW_QUEUE,
       label: "Review Queue",
       value: metrics.inReviewCount,
       icon: Icons.inbox,
     },
     {
-      href: "/admin/publish-queue",
+      href: ADMIN_ROUTES.PUBLISH_QUEUE,
       label: "Publish Queue",
       value: metrics.readyToPublishCount,
       icon: Icons.send,
     },
-    { href: "/admin/batch-planner", label: "Batch Planner", icon: Icons["clipboard-list"] },
-    { href: "/admin/content-inventory", label: "Content Inventory", icon: Icons["bar-chart"] },
-    { href: "/admin/launch-readiness", label: "Launch Readiness", icon: Icons["file-check"] },
-    { href: "/admin/blueprint-coverage", label: "Blueprint Coverage", icon: Icons["bar-chart"] },
-    { href: "/admin/missing-content", label: "Missing Content", icon: Icons["help-circle"] },
-    { href: "/admin/issue-reports", label: "Issue Reports", icon: Icons.inbox },
-    { href: "/admin/analytics", label: "Analytics", icon: Icons["bar-chart"] },
+    { href: ADMIN_ROUTES.BATCH_PLANNER, label: "Batch Planner", icon: Icons["clipboard-list"] },
+    { href: ADMIN_ROUTES.CONTENT_INVENTORY, label: "Content Inventory", icon: Icons["bar-chart"] },
+    { href: ADMIN_ROUTES.LAUNCH_READINESS, label: "Launch Readiness", icon: Icons["file-check"] },
+    { href: ADMIN_ROUTES.BLUEPRINT_COVERAGE, label: "Blueprint Coverage", icon: Icons["bar-chart"] },
+    { href: ADMIN_ROUTES.MISSING_CONTENT, label: "Missing Content", icon: Icons["help-circle"] },
+    { href: ADMIN_ROUTES.ISSUE_REPORTS, label: "Issue Reports", icon: Icons.inbox },
+    { href: ADMIN_ROUTES.ANALYTICS, label: "Analytics", icon: Icons["bar-chart"] },
   ];
 
   const bp = metrics.batchPlans;
@@ -144,7 +145,7 @@ export default async function AdminOverviewPage() {
                   >
                     <td className="p-4 font-medium text-slate-900 dark:text-white">
                       <Link
-                        href={`/admin/content-inventory?trackId=${row.trackId}`}
+                        href={`${ADMIN_ROUTES.CONTENT_INVENTORY}?trackId=${row.trackId}`}
                         className="hover:text-indigo-600 dark:hover:text-indigo-400"
                       >
                         {row.trackName}
@@ -229,7 +230,7 @@ export default async function AdminOverviewPage() {
               </p>
             </div>
             <Link
-              href="/admin/ai-factory"
+              href={ADMIN_ROUTES.AI_FACTORY}
               className="text-sm font-medium text-indigo-600 dark:text-indigo-400 hover:underline"
             >
               AI Factory →
@@ -294,7 +295,7 @@ export default async function AdminOverviewPage() {
                 ))}
             </ul>
             <Link
-              href="/admin/missing-content"
+              href={ADMIN_ROUTES.MISSING_CONTENT}
               className="inline-block mt-3 text-sm font-medium text-indigo-600 dark:text-indigo-400 hover:underline"
             >
               View missing content →

@@ -42,7 +42,7 @@ export function Badge({
 
   return (
     <span
-      className={`inline-flex items-center font-medium rounded-lg ${sizeClass} ${variantClass} ${className}`}
+      className={`inline-flex items-center font-medium rounded-full ${sizeClass} ${variantClass} ${className}`}
       {...props}
     >
       {children}

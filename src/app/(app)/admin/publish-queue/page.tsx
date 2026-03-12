@@ -4,16 +4,17 @@ import { StatusBadge } from "@/components/admin/StatusBadge";
 import { TrackBadge } from "@/components/admin/TrackBadge";
 import { AdminTrackFilter } from "@/components/admin/AdminTrackFilter";
 import { ContentStatusTransitionForm } from "@/components/admin/ContentStatusTransitionForm";
+import { ADMIN_ROUTES } from "@/config/admin-routes";
 import { loadAdminPublishQueue, loadExamTracks } from "@/lib/admin/loaders";
 import { getSessionUser } from "@/lib/auth/session";
 import type { WorkflowStatus } from "@/types/admin";
 
 const EDIT_LINKS: Record<string, string> = {
-  question: "/admin/questions",
-  study_guide: "/admin/study-guides",
-  video: "/admin/videos",
-  flashcard_deck: "/admin/flashcards",
-  high_yield_content: "/admin/high-yield",
+  question: ADMIN_ROUTES.QUESTIONS,
+  study_guide: ADMIN_ROUTES.STUDY_GUIDES,
+  video: ADMIN_ROUTES.VIDEOS,
+  flashcard_deck: ADMIN_ROUTES.FLASHCARDS,
+  high_yield_content: ADMIN_ROUTES.HIGH_YIELD,
 };
 
 type Props = { searchParams: Promise<{ trackId?: string }> };
@@ -61,7 +62,7 @@ export default async function PublishQueuePage({ searchParams }: Props) {
                 </tr>
               ) : (
                 items.map((item) => {
-                  const baseHref = EDIT_LINKS[item.type] ?? "/admin";
+                  const baseHref = EDIT_LINKS[item.type] ?? ADMIN_ROUTES.OVERVIEW;
                   const editHref = `${baseHref}/${item.id}`;
                   return (
                     <tr key={`${item.type}-${item.id}`} className="border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50">

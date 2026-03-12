@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { getSessionUser } from "@/lib/auth/session";
 import { completeOnboarding } from "@/lib/auth/profile";
-import { createFreeTrialSubscription } from "@/lib/billing/subscription";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { isSupabaseServiceRoleConfigured } from "@/lib/supabase/env";
@@ -130,15 +129,8 @@ export async function POST(request: Request) {
     console.log("[onboarding API] save success for user", user.id);
   }
 
-  const trialResult = await createFreeTrialSubscription(user.id);
-  if (trialResult.created) {
-    if (process.env.NODE_ENV === "development") {
-      console.log("[onboarding API] free trial created for user", user.id);
-    }
-  }
-  if (trialResult.error) {
-    console.warn("[onboarding API] free trial creation failed:", trialResult.error, "userId:", user.id);
-  }
+  // Trial is now created in plan selection step (POST /api/onboarding/select-plan).
+  // Paid subscriptions are created via Stripe webhook.
 
   revalidatePath("/dashboard");
   revalidatePath("/(app)");
