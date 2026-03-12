@@ -1,4 +1,3 @@
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth/session";
 import { getProfile } from "@/lib/auth/profile";
@@ -40,10 +39,8 @@ export default async function DashboardPage() {
   }
   // Redirect when no valid track: no primary, or orphaned track (trackId empty = FK doesn't exist in exam_tracks)
   if (!primary || !primary.trackId) {
-    const pathname = (await headers()).get("x-pathname") ?? "";
     if (process.env.NODE_ENV === "development") {
       console.log("[dashboard] redirect: no valid primary track", {
-        pathname,
         hasProfileTrack: !!profile?.primary_exam_track_id,
         primaryTrackId: primary?.trackId ?? "none",
       });

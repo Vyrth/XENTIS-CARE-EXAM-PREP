@@ -4,7 +4,7 @@ import React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { PRIMARY_NAV, ADMIN_NAV } from "@/config/nav";
-import { isAdminRoute } from "@/config/admin-routes";
+import { isAdminRoute } from "@/config/routes";
 import { Icons } from "@/components/ui/icons";
 import { SignOutButton } from "@/components/auth/SignOutButton";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";

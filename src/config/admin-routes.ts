@@ -52,7 +52,11 @@ export const ADMIN_ROUTES = {
   MISSING_CONTENT: `${ADMIN_BASE}/missing-content`,
 } as const;
 
-/** Check if pathname is under the admin area */
+/**
+ * Check if pathname is under the admin CMS area.
+ * Includes /admin/login - use routes.isAdminRoute() for admin-protected routes only.
+ * @deprecated Prefer routes.isAdminRoute() which excludes /admin/login
+ */
 export function isAdminRoute(pathname: string): boolean {
   return pathname === ADMIN_BASE || pathname.startsWith(`${ADMIN_BASE}/`);
 }

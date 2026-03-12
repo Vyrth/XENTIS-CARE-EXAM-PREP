@@ -1,53 +1,15 @@
 import { NextResponse, NextRequest } from "next/server";
 import { updateSession } from "@/lib/supabase/middleware";
 import {
-  ADMIN_LOGIN,
   getAdminRedirectTarget,
   isAdminRoute,
+  isAuthCallbackRoute,
+  isAuthRoute,
   isBadAdminPath,
-} from "@/config/admin-routes";
+  isPublicRoute,
+} from "@/config/routes";
+import { ADMIN_LOGIN } from "@/config/admin-routes";
 import { getSafeRedirectPath } from "@/lib/auth/url";
-
-/**
- * Public routes - no auth required
- */
-const PUBLIC_ROUTES = [
-  "/",
-  "/pricing",
-  "/faq",
-  "/legal/terms",
-  "/legal/privacy",
-];
-
-/**
- * Auth routes - sign in, callback (redirect if already authenticated)
- */
-const AUTH_ROUTES = ["/login", "/signup", ADMIN_LOGIN];
-
-/**
- * Onboarding - first-time setup (redirect if already completed)
- */
-const ONBOARDING_ROUTE = "/onboarding";
-
-function isPublicRoute(pathname: string): boolean {
-  return PUBLIC_ROUTES.some(
-    (route) => pathname === route || pathname.startsWith(`${route}/`)
-  );
-}
-
-function isAuthRoute(pathname: string): boolean {
-  return AUTH_ROUTES.some(
-    (route) => pathname === route || pathname.startsWith(`${route}/`)
-  );
-}
-
-function isOnboardingRoute(pathname: string): boolean {
-  return pathname === ONBOARDING_ROUTE || pathname.startsWith(`${ONBOARDING_ROUTE}/`);
-}
-
-function isAuthCallbackRoute(pathname: string): boolean {
-  return pathname.startsWith("/auth/callback");
-}
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
