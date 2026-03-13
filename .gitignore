@@ -13,3 +13,5 @@ build/
 # Supabase temporary files (do not commit)
 supabase/.temp/
 supabase/.branches/
+
+.env*
