@@ -133,7 +133,11 @@ export function QuestionsTab({ config, data, onConfigChange, pendingGeneratePres
         setPreview(result.draft);
         setAuditId(result.auditId ?? null);
       } else {
-        setError(result.error ?? "Generation failed");
+        const err = result.error ?? "Generation failed";
+        setError(err);
+        if (err.includes("Question type") || err.includes("question_types")) {
+          setFieldErrors((prev) => ({ ...prev, itemTypeSlug: err }));
+        }
       }
     } finally {
       setGenerating(false);
@@ -149,7 +153,11 @@ export function QuestionsTab({ config, data, onConfigChange, pendingGeneratePres
       if (result.success && result.contentId) {
         router.push(`/admin/questions/${result.contentId}`);
       } else {
-        setError(result.error ?? "Save failed");
+        const err = result.error ?? "Save failed";
+        setError(err);
+        if (err.includes("Question type") || err.includes("question_types")) {
+          setFieldErrors((prev) => ({ ...prev, itemTypeSlug: err }));
+        }
       }
     } finally {
       setSaving(false);

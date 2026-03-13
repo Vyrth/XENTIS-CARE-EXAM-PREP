@@ -128,7 +128,7 @@ export async function generateQuestionDraft(config: GenerationConfig): Promise<{
     const slug = resolved.itemTypeSlug ?? "single_best_answer";
     return {
       success: false,
-      error: `Question type "${slug}" not found. Run \`supabase db reset\` or seed question_types.`,
+      error: `Question type "${slug}" not found. Ensure question_types migration has been applied.`,
     };
   }
 
@@ -210,7 +210,7 @@ export async function saveQuestionDraft(
     const slug = resolved.itemTypeSlug ?? "single_best_answer";
     return {
       success: false,
-      error: `Question type "${slug}" not found. Run \`supabase db reset\` or seed question_types.`,
+      error: `Question type "${slug}" not found. Ensure question_types migration has been applied.`,
     };
   }
 
@@ -254,7 +254,7 @@ export async function generateAndSaveQuestion(config: GenerationConfig): Promise
     const slug = resolved.itemTypeSlug ?? "single_best_answer";
     return {
       success: false,
-      error: `Question type "${slug}" not found. Run \`supabase db reset\` or seed question_types.`,
+      error: `Question type "${slug}" not found. Ensure question_types migration has been applied.`,
     };
   }
 
