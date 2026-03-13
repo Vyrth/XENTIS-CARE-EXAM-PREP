@@ -2,7 +2,12 @@ node_modules/
 .next/
 .env
 .env.local
-.env.*.local
+.env.production
+.env.development
+.env.test
+.env*.local
+!.env.local.example
+!.env.example
 coverage/
 dist/
 build/
@@ -13,5 +18,3 @@ build/
 # Supabase temporary files (do not commit)
 supabase/.temp/
 supabase/.branches/
-
-.env*
