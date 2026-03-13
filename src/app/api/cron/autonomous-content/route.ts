@@ -3,6 +3,7 @@
  *
  * Modes (query param ?mode=):
  * - process-shards: Process queued AI batch jobs (every 2h)
+ * - autonomous-generation: Gap-based recurring generation (reads cadence config)
  * - nightly-underfill: Queue underfill campaign for low-coverage areas (nightly)
  * - weekly-rebalance: Queue blueprint rebalance campaign (weekly)
  * - monthly-low-coverage: Queue low-coverage regeneration (monthly)
@@ -17,6 +18,7 @@ import {
   queueWeeklyRebalanceCampaign,
   getSettings,
 } from "@/lib/admin/autonomous-operations";
+import { runAutonomousGeneration } from "@/lib/admin/autonomous-cadence";
 import { claimNextShard, updateCampaignProgress } from "@/lib/ai/campaign-orchestrator";
 import { runBatchJob } from "@/lib/ai/batch-engine";
 import { logBatchJobEvent } from "@/lib/ai/batch-scheduler";
@@ -88,6 +90,22 @@ export async function POST(req: Request) {
         success: result.success,
         completedCount: result.progress?.completedCount ?? 0,
         failedCount: result.progress?.failedCount ?? 0,
+      });
+    }
+
+    if (mode === "autonomous-generation") {
+      const dryRun = url.searchParams.get("dryRun") === "true";
+      const result = await runAutonomousGeneration(dryRun);
+      return NextResponse.json({
+        mode: "autonomous-generation",
+        dryRun: result.dryRun,
+        launched: result.launched,
+        campaignId: result.campaignId,
+        shardCount: result.shardCount,
+        targetTotal: result.targetTotal,
+        skippedReasons: result.skippedReasons,
+        error: result.error,
+        log: result.log,
       });
     }
 

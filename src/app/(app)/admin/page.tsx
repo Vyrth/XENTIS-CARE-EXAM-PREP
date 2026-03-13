@@ -57,6 +57,70 @@ export default async function AdminOverviewPage() {
         <ResetContentButton />
       </div>
 
+      {/* Autonomous mode summary banner */}
+      {(metrics.autonomousSummary.totalGenerated > 0 ||
+        metrics.autonomousSummary.jobsPending > 0 ||
+        metrics.autonomousSummary.jobsRunning > 0) && (
+        <Card className="border-indigo-200 dark:border-indigo-800 bg-indigo-50/30 dark:bg-indigo-900/10">
+          <div className="p-4">
+            <h2 className="font-semibold text-slate-900 dark:text-white flex items-center gap-2 mb-3">
+              {Icons.sparkles}
+              Autonomous mode summary
+            </h2>
+            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-4 text-sm">
+              <div>
+                <p className="text-slate-500">Total generated</p>
+                <p className="font-semibold text-slate-900 dark:text-white tabular-nums">
+                  {metrics.autonomousSummary.totalGenerated}
+                </p>
+              </div>
+              <div>
+                <p className="text-slate-500">Auto-published</p>
+                <p className="font-semibold text-emerald-600 dark:text-emerald-400 tabular-nums">
+                  {metrics.autonomousSummary.autoPublished}
+                </p>
+              </div>
+              <div>
+                <p className="text-slate-500">Sent to review</p>
+                <p className="font-semibold text-amber-600 dark:text-amber-400 tabular-nums">
+                  {metrics.autonomousSummary.sentToReview}
+                </p>
+              </div>
+              <div>
+                <p className="text-slate-500">Failed validation</p>
+                <p className="font-semibold text-rose-600 dark:text-rose-400 tabular-nums">
+                  {metrics.autonomousSummary.failedValidation}
+                </p>
+              </div>
+              <div>
+                <p className="text-slate-500">Duplicate skipped</p>
+                <p className="font-semibold text-slate-600 dark:text-slate-400 tabular-nums">
+                  {metrics.autonomousSummary.duplicateSkipped}
+                </p>
+              </div>
+              <div>
+                <p className="text-slate-500">Jobs pending</p>
+                <p className="font-semibold text-slate-900 dark:text-white tabular-nums">
+                  {metrics.autonomousSummary.jobsPending}
+                </p>
+              </div>
+              <div>
+                <p className="text-slate-500">Jobs running</p>
+                <p className="font-semibold text-indigo-600 dark:text-indigo-400 tabular-nums">
+                  {metrics.autonomousSummary.jobsRunning}
+                </p>
+              </div>
+            </div>
+            <Link
+              href={ADMIN_ROUTES.AI_FACTORY}
+              className="inline-block mt-3 text-sm font-medium text-indigo-600 dark:text-indigo-400 hover:underline"
+            >
+              AI Factory →
+            </Link>
+          </div>
+        </Card>
+      )}
+
       {/* Learner metrics */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <Card padding="sm">

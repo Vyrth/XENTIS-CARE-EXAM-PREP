@@ -8,6 +8,10 @@ import {
   type CardMetadata,
 } from "@/lib/admin/flashcard-studio-loaders";
 import { ensureSourceEvidenceForAdminContent } from "@/lib/admin/source-evidence";
+import { ensureContentEvidenceMetadata } from "@/lib/admin/source-governance";
+import { getTrackSlug } from "@/lib/admin/source-governance-helpers";
+import { computeFlashcardDeckQualityScore } from "@/lib/ai/content-quality-scoring";
+import { upsertContentQualityMetadata, runAutoPublishFlow } from "@/lib/admin/auto-publish";
 
 export interface FlashcardDeckFormData {
   examTrackId: string;
@@ -70,6 +74,10 @@ export async function createFlashcardDeck(
     }
 
     await ensureSourceEvidenceForAdminContent("flashcard_deck", d.id);
+    const trackSlug = await getTrackSlug(data.examTrackId);
+    if (trackSlug) {
+      await ensureContentEvidenceMetadata("flashcard_deck", d.id, trackSlug, {});
+    }
 
     revalidatePath("/admin/flashcards");
     return { success: true, deckId: d.id };
@@ -158,6 +166,32 @@ export async function saveFlashcards(
           display_order: i,
         });
       }
+    }
+
+    if (cards.length > 0) {
+      const { data: deck } = await supabase
+        .from("flashcard_decks")
+        .select("name, deck_type, status, exam_track_id")
+        .eq("id", deckId)
+        .single();
+      const trackSlug = deck?.exam_track_id ? await getTrackSlug(deck.exam_track_id) : null;
+      if (trackSlug) {
+        await ensureContentEvidenceMetadata("flashcard_deck", deckId, trackSlug, {});
+      }
+      const draft = {
+        name: deck?.name ?? "",
+        cards: cards.map((c) => ({ frontText: c.frontText, backText: c.backText })),
+        deckType: deck?.deck_type,
+      };
+      const quality = computeFlashcardDeckQualityScore(draft);
+      await upsertContentQualityMetadata("flashcard_deck", deckId, {
+        qualityScore: quality.qualityScore,
+        autoPublishEligible: quality.autoPublishEligible,
+        validationStatus: quality.validationStatus,
+        validationErrors: quality.validationErrors,
+      });
+      const fromStatus = (deck?.status as string) ?? "draft";
+      await runAutoPublishFlow("flashcard_deck", deckId, "flashcard_deck", fromStatus, null);
     }
 
     revalidatePath("/admin/flashcards");

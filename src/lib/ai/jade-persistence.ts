@@ -3,7 +3,7 @@
  *
  * Saves AI-generated content into Supabase production tables with:
  * - Track-safe relationships (exam_track_id, system_id, topic_id)
- * - Draft/editor_review status (never auto-publish)
+ * - Draft initially; auto-publish when quality gate passes (via ai-factory-persistence)
  * - content_dedupe_registry registration
  * - Transaction-safe rollback on partial failure
  */

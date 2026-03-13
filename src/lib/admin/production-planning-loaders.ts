@@ -58,7 +58,7 @@ export async function loadProductionPlanningData(): Promise<TrackProductionRow[]
       ] = await Promise.all([
         supabase.from("questions").select("id", { count: "exact", head: true }).eq("exam_track_id", t.id).in("status", [...LEARNER_VISIBLE_STATUSES]),
         supabase.from("study_guides").select("id", { count: "exact", head: true }).eq("exam_track_id", t.id).in("status", [...LEARNER_VISIBLE_STATUSES]),
-        supabase.from("flashcard_decks").select("id").eq("exam_track_id", t.id),
+        supabase.from("flashcard_decks").select("id").eq("exam_track_id", t.id).in("status", [...LEARNER_VISIBLE_STATUSES]),
         supabase.from("high_yield_content").select("id", { count: "exact", head: true }).eq("exam_track_id", t.id).in("status", [...LEARNER_VISIBLE_STATUSES]),
       ]);
 

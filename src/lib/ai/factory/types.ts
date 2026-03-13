@@ -1,6 +1,6 @@
 /**
  * AI Content Factory - shared types for generation config, validation, and persistence.
- * All generated content is draft or editor_review only. Never auto-published.
+ * Content is saved as draft or editor_review; auto-publish when quality gate passes and enabled.
  */
 
 export type ExamTrackSlug = "lvn" | "rn" | "fnp" | "pmhnp";

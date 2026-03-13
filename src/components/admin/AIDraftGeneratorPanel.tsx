@@ -165,11 +165,11 @@ export function AIDraftGeneratorPanel({
           AI Draft: {typeLabels[draftType] ?? draftType}
         </h3>
         <span className="text-xs text-amber-600 bg-amber-50 dark:bg-amber-900/20 px-2 py-0.5 rounded">
-          Draft only · Human review required
+          Auto-publish when quality gate passes; otherwise editor review
         </span>
       </div>
       <p className="text-xs text-slate-500 mb-4">
-        Generate a track-specific draft. All output is draft-only and never auto-published.
+        Generate a track-specific draft. Auto-published when quality gate passes; otherwise routed to editor review.
       </p>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-4">

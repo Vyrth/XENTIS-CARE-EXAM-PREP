@@ -116,13 +116,9 @@ async function applyQualityAndAutoPublish(
   config: BulkQuestionItem["config"]
 ): Promise<void> {
   const { computeQuestionQualityScore } = await import("@/lib/ai/content-quality-scoring");
-  const { upsertContentQualityMetadata, tryAutoPublish, getAutoPublishConfig } = await import("@/lib/admin/auto-publish");
+  const { upsertContentQualityMetadata, runAutoPublishFlow } = await import("@/lib/admin/auto-publish");
   const { getSourceFrameworkForTrack } = await import("@/lib/admin/autonomous-operations");
-  const {
-    upsertContentEvidenceMetadata,
-    getApprovedSourceIdBySlug,
-    validateSourceSlugsForTrack,
-  } = await import("@/lib/admin/source-governance");
+  const { ensureContentEvidenceMetadata } = await import("@/lib/admin/source-governance");
 
   if (isSupabaseServiceRoleConfigured()) {
     const framework = await getSourceFrameworkForTrack(config.trackSlug);
@@ -134,18 +130,11 @@ async function applyQualityAndAutoPublish(
       );
     }
     const ext = draft as { primaryReference?: string; guidelineReference?: string; evidenceTier?: 1 | 2 | 3 };
-    const slugs: string[] = [];
-    if (ext.primaryReference) slugs.push(ext.primaryReference);
-    if (ext.guidelineReference) slugs.push(ext.guidelineReference);
-    const validation = await validateSourceSlugsForTrack(config.trackSlug, slugs);
-    const primaryId = ext.primaryReference ? await getApprovedSourceIdBySlug(ext.primaryReference) : null;
-    const guidelineId = ext.guidelineReference ? await getApprovedSourceIdBySlug(ext.guidelineReference) : null;
-    await upsertContentEvidenceMetadata(entityType, entityId, {
+    await ensureContentEvidenceMetadata(entityType, entityId, config.trackSlug, {
+      aiPrimarySlug: ext.primaryReference ?? null,
+      aiGuidelineSlug: ext.guidelineReference ?? null,
+      aiEvidenceTier: ext.evidenceTier ?? null,
       sourceFrameworkId: framework?.id ?? null,
-      primaryReferenceId: validation.valid ? primaryId : null,
-      guidelineReferenceId: validation.valid ? guidelineId : null,
-      evidenceTier: ext.evidenceTier ?? null,
-      sourceSlugs: validation.valid ? slugs : [],
     });
   }
 
@@ -157,10 +146,7 @@ async function applyQualityAndAutoPublish(
     validationErrors: quality.validationErrors,
     generationMetadata: { source: "ai_content_factory" },
   });
-  const apConfig = await getAutoPublishConfig("question");
-  if (apConfig?.enabled && quality.autoPublishEligible) {
-    await tryAutoPublish(entityType, entityId, "question", fromStatus, null);
-  }
+  await runAutoPublishFlow(entityType, entityId, "question", fromStatus, null);
 }
 
 /** Build question row + options, with stem_normalized_hash for dedupe */

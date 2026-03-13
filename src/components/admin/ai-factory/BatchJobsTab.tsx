@@ -296,8 +296,8 @@ export function BatchJobsTab({ config, data, onConfigChange }: BatchJobsTabProps
       <Card>
         <h2 className="font-semibold text-slate-900 dark:text-white mb-4">Batch Generation</h2>
         <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
-          Generate content at scale for a track. Single track per job (no mixed-track). All output saved as draft.
-          Duplicate question stems are skipped automatically.
+          Generate content at scale for a track. Single track per job (no mixed-track). Auto-published when quality
+          gate passes; otherwise routed to editor review. Duplicate stems skipped automatically.
         </p>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
@@ -583,7 +583,7 @@ export function BatchJobsTab({ config, data, onConfigChange }: BatchJobsTabProps
                   <th className="text-left py-2 px-3">Status</th>
                   <th className="text-left py-2 px-3">Started</th>
                   <th className="text-left py-2 px-3">Completed</th>
-                  <th className="text-left py-2 px-3">Latest log</th>
+                  <th className="text-left py-2 px-3">Error / Log</th>
                   <th className="text-left py-2 px-3">Actions</th>
                 </tr>
               </thead>
@@ -609,8 +609,14 @@ export function BatchJobsTab({ config, data, onConfigChange }: BatchJobsTabProps
                     <td className="py-2 px-3 text-slate-500 text-xs">
                       {j.completedAt ? new Date(j.completedAt).toLocaleString() : "—"}
                     </td>
-                    <td className="py-2 px-3 max-w-[180px] truncate text-slate-500" title={j.latestLogMessage ?? undefined}>
-                      {j.latestLogMessage ?? "—"}
+                    <td className="py-2 px-3 max-w-[220px]" title={j.errorMessage ?? j.latestLogMessage ?? undefined}>
+                      {j.status === "failed" && j.errorMessage ? (
+                        <span className="block truncate text-red-600 dark:text-red-400" title={j.errorMessage}>
+                          {j.errorMessage}
+                        </span>
+                      ) : (
+                        <span className="block truncate text-slate-500">{j.latestLogMessage ?? "—"}</span>
+                      )}
                     </td>
                     <td className="py-2 px-3">
                       <div className="flex gap-1">

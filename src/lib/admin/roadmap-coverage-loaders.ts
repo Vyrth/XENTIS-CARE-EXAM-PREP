@@ -128,7 +128,8 @@ export async function loadRoadmapCoverageGaps(
             .from("flashcard_decks")
             .select("id")
             .eq("exam_track_id", track.id)
-            .eq("system_id", sys.id),
+            .eq("system_id", sys.id)
+            .in("status", ["approved", "published"]),
           supabase
             .from("high_yield_content")
             .select("id", { count: "exact", head: true })
@@ -222,7 +223,8 @@ export async function loadRoadmapCoverageGaps(
               .from("flashcard_decks")
               .select("id")
               .eq("exam_track_id", track.id)
-              .eq("topic_id", t.id),
+              .eq("topic_id", t.id)
+              .in("status", ["approved", "published"]),
             supabase
               .from("high_yield_content")
               .select("id", { count: "exact", head: true })

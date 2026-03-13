@@ -29,6 +29,7 @@ import {
   validateFlashcardDraft,
   validateHighYieldDraft,
 } from "@/lib/ai/factory/validation";
+import { resolveQuestionTypeId } from "@/lib/ai/factory/question-type-resolver";
 import type { GenerationConfig } from "@/lib/ai/factory/types";
 import { GENERATION_PRESETS, type GenerationPreset } from "@/lib/ai/factory/presets";
 import { createServiceClient } from "@/lib/supabase/service";
@@ -94,11 +95,8 @@ export interface GenerateAndSaveResult {
   summary?: string;
 }
 
-/** Generate question draft for preview (no save) */
-export async function generateQuestionDraft(
-  config: GenerationConfig,
-  questionTypeId: string
-): Promise<{
+/** Generate question draft for preview (no save). Resolves question_type_id from config.itemTypeSlug server-side. */
+export async function generateQuestionDraft(config: GenerationConfig): Promise<{
   success: boolean;
   draft?: {
     stem: string;
@@ -123,6 +121,15 @@ export async function generateQuestionDraft(
   const validation = validateGenerationConfig(resolved, "question", trackOptions);
   if (!validation.success) {
     return { success: false, error: validation.errors.join("; ") };
+  }
+
+  const questionTypeId = await resolveQuestionTypeId(resolved.itemTypeSlug);
+  if (!questionTypeId) {
+    const slug = resolved.itemTypeSlug ?? "single_best_answer";
+    return {
+      success: false,
+      error: `Question type "${slug}" not found. Run \`supabase db reset\` or seed question_types.`,
+    };
   }
 
   const req = toContentFactoryRequest(resolved, "question");
@@ -171,7 +178,7 @@ export async function generateQuestionDraft(
   };
 }
 
-/** Save a previewed question draft */
+/** Save a previewed question draft. Resolves question_type_id from config.itemTypeSlug server-side. */
 export async function saveQuestionDraft(
   config: GenerationConfig,
   draft: {
@@ -183,7 +190,6 @@ export async function saveQuestionDraft(
     itemType?: string;
     difficulty?: number;
   },
-  questionTypeId: string,
   auditIdFromPreview?: string
 ): Promise<GenerateAndSaveResult> {
   const guard = await withAdminAIGuard();
@@ -197,6 +203,15 @@ export async function saveQuestionDraft(
   const validation = validateGenerationConfig(resolved, "question", trackOptions);
   if (!validation.success) {
     return { success: false, error: validation.errors.join("; ") };
+  }
+
+  const questionTypeId = await resolveQuestionTypeId(resolved.itemTypeSlug);
+  if (!questionTypeId) {
+    const slug = resolved.itemTypeSlug ?? "single_best_answer";
+    return {
+      success: false,
+      error: `Question type "${slug}" not found. Run \`supabase db reset\` or seed question_types.`,
+    };
   }
 
   const auditId = auditIdFromPreview ?? (await recordAudit("question", resolved, guard.userId));
@@ -219,11 +234,8 @@ export async function saveQuestionDraft(
   };
 }
 
-/** Generate question and save as draft */
-export async function generateAndSaveQuestion(
-  config: GenerationConfig,
-  questionTypeId: string
-): Promise<GenerateAndSaveResult> {
+/** Generate question and save as draft. Resolves question_type_id from config.itemTypeSlug server-side. */
+export async function generateAndSaveQuestion(config: GenerationConfig): Promise<GenerateAndSaveResult> {
   const guard = await withAdminAIGuard();
   if (!guard.allowed) return { success: false, error: guard.error };
 
@@ -235,6 +247,15 @@ export async function generateAndSaveQuestion(
   const validation = validateGenerationConfig(resolved, "question", trackOptions);
   if (!validation.success) {
     return { success: false, error: validation.errors.join("; ") };
+  }
+
+  const questionTypeId = await resolveQuestionTypeId(resolved.itemTypeSlug);
+  if (!questionTypeId) {
+    const slug = resolved.itemTypeSlug ?? "single_best_answer";
+    return {
+      success: false,
+      error: `Question type "${slug}" not found. Run \`supabase db reset\` or seed question_types.`,
+    };
   }
 
   const req = toContentFactoryRequest(resolved, "question");

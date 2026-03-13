@@ -36,7 +36,7 @@ export default async function AIPromptManagerPage() {
                     <input type="checkbox" defaultChecked={prompt.enabled} />
                     Enabled
                   </label>
-                  <button type="button" className="px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 text-sm">Edit</button>
+                  <span className="text-xs text-slate-400 italic">Edit coming soon</span>
                 </div>
               </div>
             </Card>
@@ -48,12 +48,12 @@ export default async function AIPromptManagerPage() {
         <h2 className="font-heading font-semibold text-slate-900 dark:text-white mb-4">
           Chunk Eligibility
         </h2>
-        <p className="text-slate-600 dark:text-slate-400 text-sm">
-          Control which content chunks are eligible for AI context. Configure by entity type, status, and system.
+        <p className="text-slate-600 dark:text-slate-400 text-sm mb-4">
+          Control which content chunks are eligible for AI context (entity type, status, track, system).
         </p>
-        <button type="button" className="mt-4 px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 text-sm">
-          Configure eligibility rules
-        </button>
+        <p className="text-sm text-slate-500 dark:text-slate-500 italic">
+          Coming soon — eligibility rules UI and persistence are not yet implemented.
+        </p>
       </Card>
     </div>
   );

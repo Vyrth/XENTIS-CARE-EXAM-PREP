@@ -39,14 +39,16 @@ export async function getPublishGateStatus(
   return { canPublish: gate.canPublish, missingStages: gate.missingStages };
 }
 
-/** Transition content status with optional review note */
+/** Transition content status with optional review note.
+ * bypassPublishGate: when true (auto-publish flow), skip review-stage and source-evidence gates. */
 export async function transitionContentStatus(
   entityType: string,
   entityId: string,
   toStatus: WorkflowStatus,
   userId: string | null,
   note?: string,
-  recordCheck?: ReviewLane
+  recordCheck?: ReviewLane,
+  bypassPublishGate?: boolean
 ): Promise<TransitionResult> {
   if (!isSupabaseServiceRoleConfigured()) {
     return { success: false, error: "Not configured" };
@@ -69,7 +71,7 @@ export async function transitionContentStatus(
     return { success: false, error: `Invalid transition: ${fromStatus} → ${toStatus}` };
   }
 
-  if (toStatus === "published") {
+  if (toStatus === "published" && !bypassPublishGate) {
     const gate = await checkPublishGate(entityType, entityId);
     if (!gate.canPublish) {
       return {
@@ -145,7 +147,7 @@ export async function transitionContentStatus(
   revalidatePath(`${ADMIN_ROUTES.FLASHCARDS}/${entityId}`);
   revalidatePath(`${ADMIN_ROUTES.HIGH_YIELD}/${entityId}`);
 
-  // Revalidate learner pages when content becomes published.
+  // Revalidate learner pages and admin factory when content becomes published.
   // Use "layout" so nested routes (e.g. /questions/system/[slug], /study-guides/[id]) revalidate on next visit.
   if (toStatus === "published") {
     revalidatePath("/questions", "layout");
@@ -156,6 +158,7 @@ export async function transitionContentStatus(
     revalidatePath("/dashboard");
     revalidatePath("/practice", "layout");
     revalidatePath("/topics", "layout");
+    revalidatePath(ADMIN_ROUTES.AI_FACTORY);
   }
 
   return { success: true };

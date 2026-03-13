@@ -5,9 +5,10 @@ import { getPrimaryTrack, clearOrphanedPrimaryTrack } from "@/lib/auth/track";
 import { AUTH_ROUTES } from "@/config/auth";
 
 /**
- * Learner layout. All routes under (learner) require onboarding + track.
- * Admin routes (/admin/*) are siblings and skip this layout entirely.
- * This avoids relying on x-pathname header which can be unreliable during RSC/hydration.
+ * Learner layout. ONLY runs for routes under (learner): /dashboard, /practice, etc.
+ *
+ * Admin routes (/admin, /admin/*) are siblings under (app) and NEVER hit this layout.
+ * Route structure guarantees admin cannot be hijacked by learner redirect logic.
  */
 export const dynamic = "force-dynamic";
 

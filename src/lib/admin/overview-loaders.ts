@@ -20,6 +20,16 @@ export interface LearnerSummary {
   questionsAnswered7d: number;
 }
 
+export interface AutonomousModeSummary {
+  totalGenerated: number;
+  autoPublished: number;
+  sentToReview: number;
+  failedValidation: number;
+  duplicateSkipped: number;
+  jobsPending: number;
+  jobsRunning: number;
+}
+
 export interface AdminOverviewMetrics {
   /** Learner activity summary */
   learner: LearnerSummary;
@@ -43,6 +53,8 @@ export interface AdminOverviewMetrics {
     active: number;
     completed: number;
   };
+  /** Autonomous mode summary (generated, auto-published, review, failed, duplicate) */
+  autonomousSummary: AutonomousModeSummary;
   /** Recent error log entries from ai_batch_job_logs */
   recentErrors: { id: string; message: string; errorCode: string | null; createdAt: string }[];
   /** Lowest coverage systems by track (systems with fewest approved questions) */
@@ -153,6 +165,56 @@ async function loadCampaignCounts(): Promise<AdminOverviewMetrics["campaigns"]> 
       return { active, completed };
     },
     { active: 0, completed: 0 }
+  );
+}
+
+/** Load autonomous mode summary (batch generation stats) */
+async function loadAutonomousModeSummary(): Promise<AutonomousModeSummary> {
+  return safeQuery(
+    async () => {
+      const supabase = createServiceClient();
+      const [jobsRes, auditRes, routedRes, pendingRes, runningRes] = await Promise.all([
+        supabase
+          .from("ai_batch_jobs")
+          .select("completed_count, failed_count, skipped_duplicate_count")
+          .limit(2000),
+        supabase.from("publish_audit").select("id", { count: "exact", head: true }).eq("auto_publish", true),
+        supabase
+          .from("content_quality_metadata")
+          .select("id", { count: "exact", head: true })
+          .not("generation_metadata->>routedToReviewReason", "is", null),
+        supabase
+          .from("ai_batch_jobs")
+          .select("id", { count: "exact", head: true })
+          .in("status", ["pending", "queued"]),
+        supabase
+          .from("ai_batch_jobs")
+          .select("id", { count: "exact", head: true })
+          .eq("status", "running"),
+      ]);
+      const jobs = jobsRes.data ?? [];
+      const totalGenerated = jobs.reduce((s, j) => s + (j.completed_count ?? 0), 0);
+      const failedValidation = jobs.reduce((s, j) => s + (j.failed_count ?? 0), 0);
+      const duplicateSkipped = jobs.reduce((s, j) => s + (j.skipped_duplicate_count ?? 0), 0);
+      return {
+        totalGenerated,
+        autoPublished: auditRes.count ?? 0,
+        sentToReview: routedRes.count ?? 0,
+        failedValidation,
+        duplicateSkipped,
+        jobsPending: pendingRes.count ?? 0,
+        jobsRunning: runningRes.count ?? 0,
+      };
+    },
+    {
+      totalGenerated: 0,
+      autoPublished: 0,
+      sentToReview: 0,
+      failedValidation: 0,
+      duplicateSkipped: 0,
+      jobsPending: 0,
+      jobsRunning: 0,
+    }
   );
 }
 
@@ -316,6 +378,7 @@ export async function loadAdminOverviewMetrics(): Promise<AdminOverviewMetrics> 
     publishQueue,
     batchPlans,
     campaigns,
+    autonomousSummary,
     recentErrors,
     lowestCoverage,
     highYieldByTrack,
@@ -327,6 +390,7 @@ export async function loadAdminOverviewMetrics(): Promise<AdminOverviewMetrics> 
     loadAdminPublishQueue(null),
     loadBatchPlanCounts(),
     loadCampaignCounts(),
+    loadAutonomousModeSummary(),
     loadRecentErrors(10),
     loadLowestCoverage(3),
     loadHighYieldCountByTrack(),
@@ -345,6 +409,7 @@ export async function loadAdminOverviewMetrics(): Promise<AdminOverviewMetrics> 
     readyToPublishCount: publishQueue.length,
     batchPlans,
     campaigns,
+    autonomousSummary,
     recentErrors,
     lowestCoverage,
   };

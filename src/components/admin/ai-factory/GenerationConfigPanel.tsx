@@ -1,6 +1,7 @@
 "use client";
 
 import type { GenerationConfig, ExamTrackSlug } from "@/lib/ai/factory/types";
+import { CANONICAL_QUESTION_TYPES } from "@/lib/ai/factory/question-type-resolver";
 
 export interface FieldErrors {
   trackId?: string;
@@ -277,7 +278,7 @@ export function GenerationConfigPanel({
         </div>
       )}
 
-      {showItemType && questionTypes.length > 0 && (
+      {showItemType && (
         <div>
           <label htmlFor="gen-item-type" className={LABEL_CLASS}>
             Question type *
@@ -285,14 +286,14 @@ export function GenerationConfigPanel({
           <select
             id="gen-item-type"
             value={config.itemTypeSlug ?? "single_best_answer"}
-            onChange={(e) => update({ itemTypeSlug: e.target.value || undefined })}
+            onChange={(e) => update({ itemTypeSlug: (e.target.value || "single_best_answer") as string })}
             className={`${INPUT_CLASS} ${fieldErrors.itemTypeSlug ? "border-red-500 dark:border-red-500" : ""}`}
             aria-required={showItemType}
             aria-invalid={!!fieldErrors.itemTypeSlug}
             aria-describedby={fieldErrors.itemTypeSlug ? "gen-item-type-error" : undefined}
             aria-label="Question type"
           >
-            {questionTypes.map((qt) => (
+            {(questionTypes.length > 0 ? questionTypes : CANONICAL_QUESTION_TYPES).map((qt) => (
               <option key={qt.id} value={qt.slug}>
                 {qt.name}
               </option>

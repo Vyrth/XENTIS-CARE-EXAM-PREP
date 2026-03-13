@@ -1,7 +1,7 @@
 /**
  * AI Content Factory - shared persistence layer.
- * Saves AI-generated content to Supabase as draft or editor_review only.
- * Never auto-publishes.
+ * Saves AI-generated content to Supabase as draft initially.
+ * Auto-publish runs in ai-factory-persistence after quality checks.
  */
 
 import { createServiceClient } from "@/lib/supabase/service";
@@ -44,9 +44,18 @@ import { normalizeForHash, simpleHash } from "@/lib/ai/dedupe-utils";
 
 const AI_STATUS = "draft" as const; // Always draft; editor_review can be set later
 
-/** Ensure status is always draft or editor_review (never auto-publish) */
+/** Resolve initial save status; auto-publish may run after in ai-factory-persistence */
 function resolveAIStatus(config: GenerationConfig): "draft" | "editor_review" {
   return config.saveStatus === "editor_review" ? "editor_review" : AI_STATUS;
+}
+
+/** Reject config with missing or invalid trackId before any DB write */
+function requireValidTrackId(config: GenerationConfig): string | null {
+  const id = config.trackId?.trim();
+  if (!id) return "Track is required";
+  const uuidLike = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (!uuidLike.test(id)) return "Invalid track ID";
+  return null;
 }
 
 export function isExtendedQuestionOutput(
@@ -96,6 +105,8 @@ export async function persistQuestion(
   if (!isSupabaseServiceRoleConfigured()) {
     return { success: false, error: "Supabase not configured" };
   }
+  const trackErr = requireValidTrackId(config);
+  if (trackErr) return { success: false, error: trackErr };
 
   const status = resolveAIStatus(config);
 
@@ -403,6 +414,8 @@ export async function persistFullStudyGuide(
   if (!isSupabaseServiceRoleConfigured()) {
     return { success: false, error: "Supabase not configured" };
   }
+  const trackErr = requireValidTrackId(config);
+  if (trackErr) return { success: false, error: trackErr };
 
   const status = resolveAIStatus(config);
 
@@ -497,6 +510,8 @@ export async function persistStudyGuideSectionPack(
   if (!isSupabaseServiceRoleConfigured()) {
     return { success: false, error: "Supabase not configured" };
   }
+  const trackErr = requireValidTrackId(config);
+  if (trackErr) return { success: false, error: trackErr };
 
   const status = resolveAIStatus(config);
 
@@ -584,6 +599,8 @@ export async function persistFlashcardDeck(
   if (!isSupabaseServiceRoleConfigured()) {
     return { success: false, error: "Supabase not configured" };
   }
+  const trackErr = requireValidTrackId(config);
+  if (trackErr) return { success: false, error: trackErr };
 
   const status = resolveAIStatus(config);
 
@@ -632,6 +649,8 @@ export async function persistFullFlashcardDeck(
   if (!isSupabaseServiceRoleConfigured()) {
     return { success: false, error: "Supabase not configured" };
   }
+  const trackErr = requireValidTrackId(config);
+  if (trackErr) return { success: false, error: trackErr };
 
   const status = resolveAIStatus(config);
   const deckType = draft.deckType ? DECK_TYPE_MAP[draft.deckType as keyof typeof DECK_TYPE_MAP] ?? draft.deckType : "rapid_recall";
@@ -861,6 +880,8 @@ export async function persistHighYieldContent(
   if (!isSupabaseServiceRoleConfigured()) {
     return { success: false, error: "Supabase not configured" };
   }
+  const trackErr = requireValidTrackId(config);
+  if (trackErr) return { success: false, error: trackErr };
 
   try {
     const supabase = createServiceClient();

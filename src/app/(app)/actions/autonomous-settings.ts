@@ -4,6 +4,7 @@ import { withAdminAIGuard } from "@/lib/auth/admin-ai-guard";
 import { createServiceClient } from "@/lib/supabase/service";
 import { isSupabaseServiceRoleConfigured } from "@/lib/supabase/env";
 import type { AutonomousSettings } from "@/lib/admin/autonomous-operations";
+import type { RunAutonomousResult } from "@/lib/admin/autonomous-cadence";
 
 export async function loadAutonomousSettingsAction(): Promise<AutonomousSettings | null> {
   const guard = await withAdminAIGuard();
@@ -22,7 +23,7 @@ export async function saveAutonomousSettingsAction(
   if (!guard.allowed) return { success: false, error: guard.error };
   if (!isSupabaseServiceRoleConfigured()) return { success: false, error: "Supabase not configured" };
 
-  const validKeys = ["cadence", "auto_publish", "source_governance", "blueprint_targets", "pre_practice"];
+  const validKeys = ["cadence", "auto_publish", "source_governance", "blueprint_targets", "pre_practice", "autonomous_generation_cadence"];
   if (!validKeys.includes(key)) return { success: false, error: `Invalid key: ${key}` };
 
   try {
@@ -79,4 +80,37 @@ export async function loadBlueprintGapsAction(
     target: g.targetQuestions,
     gap: g.gap,
   }));
+}
+
+export async function runAutonomousGenerationAction(
+  dryRun: boolean
+): Promise<{ success: boolean; result?: RunAutonomousResult; error?: string }> {
+  const guard = await withAdminAIGuard();
+  if (!guard.allowed) return { success: false, error: guard.error };
+
+  const { runAutonomousGeneration } = await import("@/lib/admin/autonomous-cadence");
+  const result = await runAutonomousGeneration(dryRun);
+  return { success: result.success, result };
+}
+
+export async function setAutonomousPausedAction(
+  paused: boolean
+): Promise<{ success: boolean; error?: string }> {
+  const guard = await withAdminAIGuard();
+  if (!guard.allowed) return { success: false, error: guard.error };
+
+  const { setAutonomousPaused } = await import("@/lib/admin/autonomous-cadence");
+  return setAutonomousPaused(paused);
+}
+
+export async function loadAutonomousCadenceAction(): Promise<{
+  cadence: import("@/lib/admin/autonomous-cadence").AutonomousGenerationCadence | null;
+  runLog: import("@/lib/admin/autonomous-cadence").AutonomousRunLog | null;
+}> {
+  const guard = await withAdminAIGuard();
+  if (!guard.allowed) return { cadence: null, runLog: null };
+
+  const { getCadenceConfig, getRunLog } = await import("@/lib/admin/autonomous-cadence");
+  const [cadence, runLog] = await Promise.all([getCadenceConfig(), getRunLog()]);
+  return { cadence, runLog };
 }

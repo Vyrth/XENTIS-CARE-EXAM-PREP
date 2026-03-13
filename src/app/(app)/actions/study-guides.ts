@@ -5,6 +5,10 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { isSupabaseServiceRoleConfigured } from "@/lib/supabase/env";
 import type { SectionMetadata } from "@/lib/admin/study-guide-studio-loaders";
 import { ensureSourceEvidenceForAdminContent } from "@/lib/admin/source-evidence";
+import { ensureContentEvidenceMetadata } from "@/lib/admin/source-governance";
+import { getTrackSlug } from "@/lib/admin/source-governance-helpers";
+import { computeStudyGuideQualityScore } from "@/lib/ai/content-quality-scoring";
+import { upsertContentQualityMetadata, runAutoPublishFlow } from "@/lib/admin/auto-publish";
 
 export interface StudyGuideFormData {
   examTrackId: string;
@@ -36,6 +40,45 @@ function slugify(s: string): string {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "");
+}
+
+/** Load guide + sections from DB, compute quality, upsert metadata, run auto-publish flow. */
+async function runStudyGuideQualityAndAutoPublish(guideId: string): Promise<void> {
+  if (!isSupabaseServiceRoleConfigured()) return;
+  const supabase = createServiceClient();
+  const { data: g } = await supabase
+    .from("study_guides")
+    .select("id, title, description, status")
+    .eq("id", guideId)
+    .single();
+  if (!g) return;
+
+  const { data: secs } = await supabase
+    .from("study_material_sections")
+    .select("id, title, content_markdown")
+    .eq("study_guide_id", guideId)
+    .is("parent_section_id", null)
+    .order("display_order", { ascending: true });
+
+  const sections = (secs ?? []).map((s) => ({
+    title: s.title ?? "",
+    contentMarkdown: s.content_markdown ?? undefined,
+  }));
+  const draft = {
+    title: g.title ?? "",
+    description: g.description ?? undefined,
+    sections,
+  };
+  const mode: "full" | "section_pack" = sections.length > 1 ? "full" : "section_pack";
+  const quality = computeStudyGuideQualityScore(draft, mode);
+  await upsertContentQualityMetadata("study_guide", guideId, {
+    qualityScore: quality.qualityScore,
+    autoPublishEligible: quality.autoPublishEligible,
+    validationStatus: quality.validationStatus,
+    validationErrors: quality.validationErrors,
+  });
+  const fromStatus = (g.status as string) ?? "draft";
+  await runAutoPublishFlow("study_guide", guideId, "study_guide", fromStatus, null);
 }
 
 export async function createStudyGuide(
@@ -76,8 +119,15 @@ export async function createStudyGuide(
     }
 
     await ensureSourceEvidenceForAdminContent("study_guide", g.id);
+    const trackSlug = await getTrackSlug(data.examTrackId);
+    if (trackSlug) {
+      await ensureContentEvidenceMetadata("study_guide", g.id, trackSlug, {});
+    }
+
+    await runStudyGuideQualityAndAutoPublish(g.id);
 
     revalidatePath("/admin/study-guides");
+    revalidatePath("/study-guides", "layout");
     return { success: true, guideId: g.id };
   } catch (e) {
     return { success: false, error: String(e) };
@@ -120,8 +170,16 @@ export async function updateStudyGuide(
       return { success: false, error: error.message };
     }
 
+    const trackSlugForUpdate = await getTrackSlug(data.examTrackId);
+    if (trackSlugForUpdate) {
+      await ensureContentEvidenceMetadata("study_guide", guideId, trackSlugForUpdate, {});
+    }
+
+    await runStudyGuideQualityAndAutoPublish(guideId);
+
     revalidatePath("/admin/study-guides");
     revalidatePath(`/admin/study-guides/${guideId}`);
+    revalidatePath("/study-guides", "layout");
     return { success: true, guideId };
   } catch (e) {
     return { success: false, error: String(e) };
@@ -186,8 +244,11 @@ export async function saveStudyGuideSections(
       }
     }
 
+    await runStudyGuideQualityAndAutoPublish(guideId);
+
     revalidatePath("/admin/study-guides");
     revalidatePath(`/admin/study-guides/${guideId}`);
+    revalidatePath("/study-guides", "layout");
     return { success: true, guideId };
   } catch (e) {
     return { success: false, error: String(e) };
@@ -211,6 +272,7 @@ export async function reorderStudyGuideSections(
         .eq("id", sectionIds[i])
         .eq("study_guide_id", guideId);
     }
+    await runStudyGuideQualityAndAutoPublish(guideId);
     revalidatePath("/admin/study-guides");
     revalidatePath(`/admin/study-guides/${guideId}`);
     return { success: true, guideId };
@@ -234,8 +296,12 @@ export async function deleteStudyGuideSection(
       .delete()
       .eq("id", sectionId)
       .eq("study_guide_id", guideId);
+
+    await runStudyGuideQualityAndAutoPublish(guideId);
+
     revalidatePath("/admin/study-guides");
     revalidatePath(`/admin/study-guides/${guideId}`);
+    revalidatePath("/study-guides", "layout");
     return { success: true, guideId };
   } catch (e) {
     return { success: false, error: String(e) };

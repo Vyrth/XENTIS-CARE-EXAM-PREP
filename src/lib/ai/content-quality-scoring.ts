@@ -8,12 +8,18 @@
 
 import type { QuestionDraftOutput } from "@/lib/ai/admin-drafts/types";
 import type { ExtendedQuestionOutput } from "@/lib/ai/content-factory/parsers";
-import { checkQuestionQuality } from "@/lib/ai/quality-checks";
+import {
+  checkQuestionQuality,
+  checkStudyGuideQuality,
+  checkFlashcardDeckQuality,
+  checkHighYieldQuality,
+} from "@/lib/ai/quality-checks";
+import type { HighYieldContentType } from "@/lib/ai/high-yield-factory/types";
 
 const MIN_RATIONALE_LENGTH = 50;
 const MIN_QUALITY_FOR_ELIGIBLE = 70;
 
-export interface QuestionQualityResult {
+export interface QualityResult {
   qualityScore: number;
   autoPublishEligible: boolean;
   validationStatus: string;
@@ -23,7 +29,7 @@ export interface QuestionQualityResult {
 /** Compute quality score and eligibility for a saved question (from draft). */
 export function computeQuestionQualityScore(
   draft: QuestionDraftOutput | ExtendedQuestionOutput
-): QuestionQualityResult {
+): QualityResult {
   const errors: string[] = [];
   const check = checkQuestionQuality({
     stem: draft.stem ?? "",
@@ -75,3 +81,60 @@ export function computeQuestionQualityScore(
     validationErrors: errors,
   };
 }
+
+/** Compute quality score for study guide (full or section pack). */
+export function computeStudyGuideQualityScore(
+  draft: { title?: string; description?: string; sections: { title?: string; contentMarkdown?: string }[] },
+  mode: "full" | "section_pack"
+): QualityResult {
+  const normalized = {
+    title: draft.title ?? "",
+    description: draft.description,
+    sections: draft.sections.map((s) => ({ title: s.title ?? "", contentMarkdown: s.contentMarkdown })),
+  };
+  const check = checkStudyGuideQuality(normalized, mode);
+  const qualityScore = Math.round((check.boardRelevance ?? 0.5) * 100);
+  const autoPublishEligible = check.valid && qualityScore >= MIN_QUALITY_FOR_ELIGIBLE;
+  return {
+    qualityScore,
+    autoPublishEligible,
+    validationStatus: check.valid ? "passed" : "validation_failed",
+    validationErrors: check.errors,
+  };
+}
+
+/** Compute quality score for flashcard deck. */
+export function computeFlashcardDeckQualityScore(draft: {
+  name: string;
+  cards: { frontText?: string; backText?: string }[];
+  deckType?: string;
+}): QualityResult {
+  const check = checkFlashcardDeckQuality(draft);
+  const qualityScore = Math.round((check.boardRelevance ?? 0.5) * 100);
+  const autoPublishEligible = check.valid && qualityScore >= MIN_QUALITY_FOR_ELIGIBLE;
+  return {
+    qualityScore,
+    autoPublishEligible,
+    validationStatus: check.valid ? "passed" : "validation_failed",
+    validationErrors: check.errors,
+  };
+}
+
+/** Compute quality score for high-yield content. */
+export function computeHighYieldQualityScore(
+  draft: Record<string, unknown>,
+  contentType: HighYieldContentType
+): QualityResult {
+  const check = checkHighYieldQuality(draft, contentType);
+  const qualityScore = Math.round((check.boardRelevance ?? 0.5) * 100);
+  const autoPublishEligible = check.valid && qualityScore >= MIN_QUALITY_FOR_ELIGIBLE;
+  return {
+    qualityScore,
+    autoPublishEligible,
+    validationStatus: check.valid ? "passed" : "validation_failed",
+    validationErrors: check.errors,
+  };
+}
+
+/** @deprecated Use QualityResult */
+export type QuestionQualityResult = QualityResult;

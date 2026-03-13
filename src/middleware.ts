@@ -57,8 +57,8 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  // Admin routes: role check happens in layout (middleware can't easily query DB)
-  // Allow through; AdminLayout will redirect if not admin
+  // Admin routes: separate protected space. Allow through; AdminLayout enforces admin role.
+  // Never apply learner redirect logic to admin.
   if (isAdminRoute(pathname)) {
     return response;
   }

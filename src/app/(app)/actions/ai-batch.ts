@@ -390,6 +390,7 @@ export interface AIBatchJobSummary {
   startedAt?: string | null;
   completedAt?: string | null;
   latestLogMessage?: string | null;
+  errorMessage?: string | null;
   trackSlug?: string;
   trackName?: string;
 }
@@ -402,7 +403,7 @@ export async function loadAIBatchJobs(limit = 20): Promise<AIBatchJobSummary[]> 
     const supabase = createServiceClient();
     const { data: jobs } = await supabase
       .from("ai_batch_jobs")
-      .select("id, exam_track_id, content_type, target_count, completed_count, failed_count, generated_count, skipped_duplicate_count, retry_count, status, created_at, started_at, completed_at")
+      .select("id, exam_track_id, content_type, target_count, completed_count, failed_count, generated_count, skipped_duplicate_count, retry_count, status, error_message, created_at, started_at, completed_at")
       .order("created_at", { ascending: false })
       .limit(limit);
     if (!jobs?.length) return [];
@@ -440,6 +441,7 @@ export async function loadAIBatchJobs(limit = 20): Promise<AIBatchJobSummary[]> 
         startedAt: j.started_at,
         completedAt: j.completed_at,
         latestLogMessage: logByJob.get(j.id) ?? null,
+        errorMessage: (j as { error_message?: string | null }).error_message ?? null,
         trackSlug: track?.slug,
         trackName: track?.name,
       };

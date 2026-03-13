@@ -13,6 +13,7 @@ import type { FieldErrors } from "./GenerationConfigPanel";
 import type { GenerationConfig } from "@/lib/ai/factory/types";
 import type { AIFactoryPageData } from "@/lib/admin/ai-factory-loaders";
 import type { GenerationPreset } from "@/lib/ai/factory/presets";
+import { CANONICAL_QUESTION_TYPES } from "@/lib/ai/factory/question-type-resolver";
 
 /** Item types supported for AI question generation */
 const AI_GENERATABLE_QUESTION_TYPES = new Set([
@@ -49,10 +50,12 @@ export function QuestionsTab({ config, data, onConfigChange, pendingGeneratePres
     [data.questionTypes]
   );
 
-  const questionTypeId = generatableTypes.find((qt) => qt.slug === (config.itemTypeSlug ?? "single_best_answer"))?.id
-    ?? generatableTypes[0]?.id
-    ?? data.questionTypes.find((qt) => qt.slug === "single_best_answer")?.id
-    ?? data.questionTypes[0]?.id;
+  /** Question types for the selector: DB types when available, else canonical fallback so field is always visible */
+  const questionTypesForSelect = useMemo(() => {
+    if (generatableTypes.length > 0) return generatableTypes;
+    if (data.questionTypes.length > 0) return data.questionTypes;
+    return CANONICAL_QUESTION_TYPES as unknown as { id: string; slug: string; name: string }[];
+  }, [generatableTypes, data.questionTypes]);
 
   const resolvedConfig = useMemo(
     () => resolveConfigTrack(config, data.tracks),
@@ -91,6 +94,7 @@ export function QuestionsTab({ config, data, onConfigChange, pendingGeneratePres
         else if (msg.includes("difficulty")) errs.targetDifficulty = msg;
         else if (msg.includes("Batch count")) errs.batchCount = msg;
         else if (msg.includes("Save status")) errs.saveStatus = msg;
+        else if (msg.includes("Question type") || msg.includes("item type")) errs.itemTypeSlug = msg;
         else errs.other = errs.other ? `${errs.other}; ${msg}` : msg;
       }
       setFieldErrors(errs);
@@ -98,11 +102,6 @@ export function QuestionsTab({ config, data, onConfigChange, pendingGeneratePres
       return;
     }
 
-    if (!questionTypeId) {
-      setFieldErrors({ itemTypeSlug: "Question type is required" });
-      setError("Question type is required");
-      return;
-    }
     if (!resolvedConfig) {
       setFieldErrors({
         trackId: config.trackId?.trim()
@@ -129,7 +128,7 @@ export function QuestionsTab({ config, data, onConfigChange, pendingGeneratePres
           topicId: fullConfig.topicId,
         });
       }
-      const result = await generateQuestionDraft(fullConfig, questionTypeId);
+      const result = await generateQuestionDraft(fullConfig);
       if (result.success && result.draft) {
         setPreview(result.draft);
         setAuditId(result.auditId ?? null);
@@ -142,11 +141,11 @@ export function QuestionsTab({ config, data, onConfigChange, pendingGeneratePres
   };
 
   const handleSave = async () => {
-    if (!preview || !resolvedConfig || !questionTypeId) return;
+    if (!preview || !resolvedConfig) return;
     setError(null);
     setSaving(true);
     try {
-      const result = await saveQuestionDraft(fullConfig, preview, questionTypeId, auditId ?? undefined);
+      const result = await saveQuestionDraft(fullConfig, preview, auditId ?? undefined);
       if (result.success && result.contentId) {
         router.push(`/admin/questions/${result.contentId}`);
       } else {
@@ -203,7 +202,7 @@ export function QuestionsTab({ config, data, onConfigChange, pendingGeneratePres
         fieldErrors={fieldErrors}
         showDomain
         showItemType
-        questionTypes={generatableTypes.length > 0 ? generatableTypes : data.questionTypes}
+        questionTypes={questionTypesForSelect}
       />
 
       <div className="mt-4 flex flex-wrap items-center gap-3">

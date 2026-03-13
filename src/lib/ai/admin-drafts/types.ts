@@ -1,6 +1,6 @@
 /**
  * Admin AI draft generation - types for all content generators.
- * All output is draft-only, never auto-published.
+ * Output is auto-published when quality gate passes; otherwise routed to editor review.
  */
 
 export type ExamTrack = "lvn" | "rn" | "fnp" | "pmhnp";

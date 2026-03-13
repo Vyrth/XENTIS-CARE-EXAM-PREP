@@ -22,6 +22,7 @@
     "db:seed": "supabase db reset",
     "seed:user": "tsx scripts/seed-user-data.ts",
     "admin:bootstrap": "tsx scripts/bootstrap-admin.ts",
+    "admin:verify": "tsx scripts/verify-admin.ts",
     "qa": "npm run typecheck && npm run lint && npm run format:check && npm run test:run"
   },
   "dependencies": {

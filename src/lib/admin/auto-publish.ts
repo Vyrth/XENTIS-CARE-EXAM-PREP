@@ -58,61 +58,15 @@ export async function getAutoPublishConfig(
   };
 }
 
-/** Check if content is eligible for auto-publish */
+/** Check if content is eligible for auto-publish. Uses evaluateAutoPublishEligibility as source of truth. */
 export async function checkAutoPublishEligibility(
   entityType: string,
   entityId: string,
   contentType: string
 ): Promise<{ eligible: boolean; reason?: string }> {
-  const config = await getAutoPublishConfig(contentType);
-  if (!config || !config.enabled) {
-    return { eligible: false, reason: "Auto-publish disabled for this content type" };
-  }
-
-  const supabase = createServiceClient();
-  const { data: meta } = await supabase
-    .from("content_quality_metadata")
-    .select("quality_score, auto_publish_eligible, validation_status, validation_errors")
-    .eq("entity_type", entityType)
-    .eq("entity_id", entityId)
-    .single();
-
-  if (!meta) {
-    return { eligible: false, reason: "No quality metadata" };
-  }
-  if (!meta.auto_publish_eligible) {
-    return { eligible: false, reason: meta.validation_status ?? "Not eligible" };
-  }
-  const score = Number(meta.quality_score ?? 0);
-  if (score < config.minQualityScore) {
-    return { eligible: false, reason: `Quality score ${score} below threshold ${config.minQualityScore}` };
-  }
-
-  const table = ENTITY_TYPE_TO_TABLE[entityType] ?? entityType;
-  const { data: row } = await supabase
-    .from(table)
-    .select("exam_track_id, system_id, topic_id, status")
-    .eq("id", entityId)
-    .single();
-
-  if (!row) return { eligible: false, reason: "Content not found" };
-  if (config.requireTrackAssigned && !row.exam_track_id) {
-    return { eligible: false, reason: "Track not assigned" };
-  }
-
-  if (config.requireSourceMapping && row.exam_track_id) {
-    const { getTrackSlug } = await import("@/lib/admin/source-governance-helpers");
-    const trackSlug = await getTrackSlug(row.exam_track_id);
-    if (trackSlug) {
-      const { hasValidSourceMapping } = await import("@/lib/admin/source-governance");
-      const sourceCheck = await hasValidSourceMapping(entityType, entityId, trackSlug);
-      if (!sourceCheck.valid) {
-        return { eligible: false, reason: sourceCheck.reason ?? "Source mapping required" };
-      }
-    }
-  }
-
-  return { eligible: true };
+  const { evaluateAutoPublishEligibility } = await import("@/lib/admin/evaluate-auto-publish");
+  const eval_ = await evaluateAutoPublishEligibility(entityType, entityId, contentType);
+  return { eligible: eval_.eligible, reason: eval_.reason };
 }
 
 /** Attempt auto-publish if eligible. Records publish_audit on success. */
@@ -134,7 +88,8 @@ export async function tryAutoPublish(
     "published",
     actorId ?? null,
     "Auto-published by quality gate",
-    undefined
+    undefined,
+    true // bypassPublishGate: quality gate passed, skip review-stage checks
   );
 
   if (!result.success) {
@@ -155,6 +110,68 @@ export async function tryAutoPublish(
   }
 
   return { published: true };
+}
+
+/** Run auto-publish flow: evaluate eligibility, publish if eligible, else route to editor_review and record reason. */
+export async function runAutoPublishFlow(
+  entityType: string,
+  entityId: string,
+  contentType: string,
+  fromStatus: string,
+  actorId?: string | null
+): Promise<{ published: boolean; routedToReview: boolean; reason?: string }> {
+  const { evaluateAutoPublishEligibility } = await import("@/lib/admin/evaluate-auto-publish");
+
+  const eval_ = await evaluateAutoPublishEligibility(entityType, entityId, contentType);
+
+  if (eval_.eligible) {
+    const result = await tryAutoPublish(entityType, entityId, contentType, fromStatus, actorId);
+    return {
+      published: result.published,
+      routedToReview: false,
+      reason: result.reason,
+    };
+  }
+
+  if (fromStatus === "draft" && eval_.routedTo === "editor_review") {
+    const result = await transitionContentStatus(
+      entityType,
+      entityId,
+      "editor_review",
+      actorId ?? null,
+      `Routed to review: ${eval_.reason ?? "Quality/source gates not met"}`,
+      undefined,
+      false
+    );
+    if (result.success && isSupabaseServiceRoleConfigured()) {
+      const supabase = createServiceClient();
+      const { data: row } = await supabase
+        .from("content_quality_metadata")
+        .select("generation_metadata")
+        .eq("entity_type", entityType)
+        .eq("entity_id", entityId)
+        .single();
+      const existing = (row?.generation_metadata as Record<string, unknown>) ?? {};
+      await supabase
+        .from("content_quality_metadata")
+        .update({
+          generation_metadata: {
+            ...existing,
+            routedToReviewReason: eval_.reason,
+            routedAt: new Date().toISOString(),
+          } as unknown,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("entity_type", entityType)
+        .eq("entity_id", entityId);
+    }
+  }
+
+  return {
+    published: false,
+    routedToReview: true,
+    reason: eval_.reason,
+  };
 }
 
 /** Upsert content_quality_metadata (called by AI factory after save) */

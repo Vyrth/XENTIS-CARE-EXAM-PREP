@@ -34,6 +34,7 @@ const DEFAULT_CONFIG: GenerationConfig = {
   trackId: "",
   trackSlug: "rn",
   saveStatus: "draft",
+  itemTypeSlug: "single_best_answer",
 };
 
 export interface AIFactoryLayoutProps {
@@ -193,8 +194,7 @@ export function AIFactoryLayout({
       <div className="flex items-center gap-2 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 px-4 py-3">
         <span className="text-amber-600 dark:text-amber-400">{Icons.alertTriangle}</span>
         <p className="text-sm text-amber-800 dark:text-amber-200">
-          <strong>AI Content Factory:</strong> All generated content is saved as draft or editor_review only.
-          Human review required before publish. Every item is auditable.
+          <strong>AI Content Factory:</strong> Content auto-publishes when quality and evidence gates pass (score ≥ threshold, source valid, track set). Otherwise routed to editor review. Every item is auditable.
         </p>
       </div>
 

@@ -8,6 +8,10 @@ import type {
   ConfusionFrequency,
 } from "@/lib/admin/high-yield-studio-loaders";
 import { ensureSourceEvidenceForAdminContent } from "@/lib/admin/source-evidence";
+import { ensureContentEvidenceMetadata } from "@/lib/admin/source-governance";
+import { getTrackSlug } from "@/lib/admin/source-governance-helpers";
+import { computeHighYieldQualityScore } from "@/lib/ai/content-quality-scoring";
+import { upsertContentQualityMetadata, runAutoPublishFlow } from "@/lib/admin/auto-publish";
 
 export interface HighYieldItemFormData {
   contentType: HighYieldContentType;
@@ -83,6 +87,30 @@ export async function createHighYieldItem(
     }
 
     await ensureSourceEvidenceForAdminContent("high_yield_content", row.id);
+    const trackSlug = await getTrackSlug(data.examTrackId);
+    if (trackSlug) {
+      await ensureContentEvidenceMetadata("high_yield_content", row.id, trackSlug, {});
+    }
+
+    const draft: Record<string, unknown> = {
+      title: data.title,
+      explanation: data.explanation,
+      whyHighYield: data.whyHighYield,
+      commonConfusion: data.commonConfusion,
+      trapDescription: data.trapDescription,
+      correctApproach: data.correctApproach,
+      conceptA: data.conceptA,
+      conceptB: data.conceptB,
+      keyDifference: data.keyDifference,
+    };
+    const quality = computeHighYieldQualityScore(draft, data.contentType);
+    await upsertContentQualityMetadata("high_yield_content", row.id, {
+      qualityScore: quality.qualityScore,
+      autoPublishEligible: quality.autoPublishEligible,
+      validationStatus: quality.validationStatus,
+      validationErrors: quality.validationErrors,
+    });
+    await runAutoPublishFlow("high_yield_content", row.id, "high_yield_content", data.status ?? "draft", null);
 
     revalidatePath("/admin/high-yield");
     return { success: true, id: row.id };
@@ -132,6 +160,32 @@ export async function updateHighYieldItem(
       .eq("id", id);
 
     if (error) return { success: false, error: error.message };
+
+    const trackSlugForUpdate = await getTrackSlug(data.examTrackId);
+    if (trackSlugForUpdate) {
+      await ensureContentEvidenceMetadata("high_yield_content", id, trackSlugForUpdate, {});
+    }
+
+    const draft: Record<string, unknown> = {
+      title: data.title,
+      explanation: data.explanation,
+      whyHighYield: data.whyHighYield,
+      commonConfusion: data.commonConfusion,
+      trapDescription: data.trapDescription,
+      correctApproach: data.correctApproach,
+      conceptA: data.conceptA,
+      conceptB: data.conceptB,
+      keyDifference: data.keyDifference,
+    };
+    const quality = computeHighYieldQualityScore(draft, data.contentType);
+    await upsertContentQualityMetadata("high_yield_content", id, {
+      qualityScore: quality.qualityScore,
+      autoPublishEligible: quality.autoPublishEligible,
+      validationStatus: quality.validationStatus,
+      validationErrors: quality.validationErrors,
+    });
+    const fromStatus = data.status ?? "draft";
+    await runAutoPublishFlow("high_yield_content", id, "high_yield_content", fromStatus, null);
 
     revalidatePath("/admin/high-yield");
     revalidatePath(`/admin/high-yield/${id}`);

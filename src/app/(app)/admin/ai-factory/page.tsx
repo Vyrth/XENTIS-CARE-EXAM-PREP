@@ -49,7 +49,7 @@ export default async function AIFactoryPage({
             AI Content Factory
           </h1>
           <p className="text-slate-600 dark:text-slate-400 mt-1">
-            Generate track-specific educational content with Jade Tutor. All output is draft or editor_review only.
+            Generate track-specific educational content. Auto-published when quality and evidence gates pass; otherwise routed to editor review. All content is auditable.
           </p>
         </div>
         <Link

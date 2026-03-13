@@ -19,6 +19,8 @@ export const DEFAULT_RATE_LIMIT_MS = CONCURRENCY_LIMITS.rateLimitMs;
 export const MAX_RETRIES_PER_ITEM = CONCURRENCY_LIMITS.maxRetriesPerItem;
 /** Max job-level retries (retry failed shards). Prevents runaway retries. */
 export const MAX_JOB_RETRIES = 5;
+/** Stale running job threshold: reclaim jobs stuck in running longer than this (ms) */
+const STALE_RUNNING_MS = 15 * 60 * 1000;
 
 export interface SchedulerConfig {
   /** Delay between API calls (ms) to prevent overload */
@@ -118,6 +120,13 @@ export async function claimNextPendingJob(useConcurrencyLimits = true): Promise<
         .maybeSingle();
       if (running) return null;
     }
+
+    const staleThreshold = new Date(Date.now() - STALE_RUNNING_MS).toISOString();
+    await supabase
+      .from("ai_batch_jobs")
+      .update({ status: "pending", updated_at: new Date().toISOString(), started_at: null })
+      .eq("status", "running")
+      .lt("started_at", staleThreshold);
 
     const { data: pending } = await supabase
       .from("ai_batch_jobs")

@@ -1,13 +1,15 @@
 /**
  * AI Content Factory - Admin persistence layer.
  *
- * Persists AI-generated content into Supabase. All records are:
+ * Persists AI-generated content into Supabase. Content is:
  * - Track-scoped (exam_track_id)
- * - Draft or editor_review only (never auto-published)
+ * - Auto-published when quality gate passes (score >= threshold, source valid, track set)
+ * - Routed to editor_review when gates fail (score below threshold, validation fails, etc.)
  * - Tagged as AI-generated in metadata/audit
  *
  * Tables: questions, question_options, study_guides, study_material_sections,
- * flashcard_decks, flashcards, high_yield_content, ai_generation_audit.
+ * flashcard_decks, flashcards, high_yield_content, ai_generation_audit,
+ * content_quality_metadata, content_evidence_metadata.
  */
 
 import {
@@ -48,8 +50,12 @@ export interface AIPersistResult {
   error?: string;
   /** Human-readable summary for admin UI */
   summary?: string;
-  /** True when question was skipped due to duplicate stem */
+  /** True when content was skipped due to duplicate */
   duplicate?: boolean;
+  /** True when content was auto-published by quality gate */
+  autoPublished?: boolean;
+  /** Reason when routed to editor_review instead of auto-publish */
+  routedToReviewReason?: string;
 }
 
 /** Persist a question (stem + options). Returns summary for admin. */
@@ -79,31 +85,16 @@ export async function saveAIQuestion(
         { onConflict: "entity_type,entity_id" }
       );
     }
-    const {
-      upsertContentEvidenceMetadata,
-      getApprovedSourceIdBySlug,
-      validateSourceSlugsForTrack,
-    } = await import("@/lib/admin/source-governance");
+    const { ensureContentEvidenceMetadata } = await import("@/lib/admin/source-governance");
     const ext = draft as { primaryReference?: string; guidelineReference?: string; evidenceTier?: 1 | 2 | 3 };
-    const slugs: string[] = [];
-    if (ext.primaryReference) slugs.push(ext.primaryReference);
-    if (ext.guidelineReference) slugs.push(ext.guidelineReference);
-    const validation = await validateSourceSlugsForTrack(config.trackSlug, slugs);
-    const primaryId = ext.primaryReference
-      ? await getApprovedSourceIdBySlug(ext.primaryReference)
-      : null;
-    const guidelineId = ext.guidelineReference
-      ? await getApprovedSourceIdBySlug(ext.guidelineReference)
-      : null;
-    await upsertContentEvidenceMetadata("question", result.contentId, {
+    await ensureContentEvidenceMetadata("question", result.contentId, config.trackSlug, {
+      aiPrimarySlug: ext.primaryReference ?? null,
+      aiGuidelineSlug: ext.guidelineReference ?? null,
+      aiEvidenceTier: ext.evidenceTier ?? null,
       sourceFrameworkId: framework?.id ?? null,
-      primaryReferenceId: validation.valid ? primaryId : null,
-      guidelineReferenceId: validation.valid ? guidelineId : null,
-      evidenceTier: ext.evidenceTier ?? null,
-      sourceSlugs: validation.valid ? slugs : [],
     });
     const { computeQuestionQualityScore } = await import("@/lib/ai/content-quality-scoring");
-    const { upsertContentQualityMetadata, tryAutoPublish, getAutoPublishConfig } = await import("@/lib/admin/auto-publish");
+    const { upsertContentQualityMetadata, runAutoPublishFlow } = await import("@/lib/admin/auto-publish");
     const quality = computeQuestionQualityScore(draft);
     await upsertContentQualityMetadata("question", result.contentId, {
       qualityScore: quality.qualityScore,
@@ -112,10 +103,25 @@ export async function saveAIQuestion(
       validationErrors: quality.validationErrors,
       generationMetadata: { source: "ai_content_factory", trackId: config.trackId },
     });
-    const apConfig = await getAutoPublishConfig("question");
-    if (apConfig?.enabled && quality.autoPublishEligible) {
-      await tryAutoPublish("question", result.contentId, "question", config.saveStatus ?? "draft", createdBy);
-    }
+    const apResult = await runAutoPublishFlow(
+      "question",
+      result.contentId,
+      "question",
+      config.saveStatus ?? "draft",
+      createdBy
+    );
+    const optionCount = Array.isArray(draft.options) ? draft.options.length : 0;
+    const summary = apResult.published
+      ? `Question auto-published. 1 question, ${optionCount} options.`
+      : apResult.routedToReview
+        ? `Question routed to editor review: ${apResult.reason ?? "Quality/source gates not met"}. 1 question, ${optionCount} options.`
+        : `Question saved as ${config.saveStatus === "editor_review" ? "editor_review" : "draft"}. 1 question, ${optionCount} options.`;
+    return {
+      ...result,
+      summary,
+      autoPublished: apResult.published,
+      routedToReviewReason: apResult.routedToReview ? apResult.reason : undefined,
+    };
   }
   const optionCount = Array.isArray(draft.options) ? draft.options.length : 0;
   return {
@@ -136,6 +142,53 @@ export async function saveAIStudyGuide(
       success: false,
       error: result.error,
       summary: `Failed to save study guide: ${result.error}`,
+    };
+  }
+  if (result.contentId) {
+    const { getSourceFrameworkForTrack } = await import("@/lib/admin/autonomous-operations");
+    const framework = await getSourceFrameworkForTrack(config.trackSlug);
+    if (framework?.id && isSupabaseServiceRoleConfigured()) {
+      const supabase = (await import("@/lib/supabase/service")).createServiceClient();
+      await supabase.from("content_source_framework").upsert(
+        { entity_type: "study_guide", entity_id: result.contentId, source_framework_id: framework.id },
+        { onConflict: "entity_type,entity_id" }
+      );
+    }
+    const { ensureContentEvidenceMetadata } = await import("@/lib/admin/source-governance");
+    const ext = draft as { primaryReference?: string; guidelineReference?: string; evidenceTier?: number };
+    await ensureContentEvidenceMetadata("study_guide", result.contentId, config.trackSlug, {
+      aiPrimarySlug: ext.primaryReference ?? null,
+      aiGuidelineSlug: ext.guidelineReference ?? null,
+      aiEvidenceTier: ext.evidenceTier ?? null,
+      sourceFrameworkId: framework?.id ?? null,
+    });
+    const { computeStudyGuideQualityScore } = await import("@/lib/ai/content-quality-scoring");
+    const { upsertContentQualityMetadata, runAutoPublishFlow } = await import("@/lib/admin/auto-publish");
+    const quality = computeStudyGuideQualityScore(draft, "full");
+    await upsertContentQualityMetadata("study_guide", result.contentId, {
+      qualityScore: quality.qualityScore,
+      autoPublishEligible: quality.autoPublishEligible,
+      validationStatus: quality.validationStatus,
+      validationErrors: quality.validationErrors,
+      generationMetadata: { source: "ai_content_factory", trackId: config.trackId },
+    });
+    const apResult = await runAutoPublishFlow(
+      "study_guide",
+      result.contentId,
+      "study_guide",
+      config.saveStatus ?? "draft",
+      undefined
+    );
+    const summary = apResult.published
+      ? `Study guide auto-published. 1 guide, ${draft.sections.length} sections.`
+      : apResult.routedToReview
+        ? `Study guide routed to editor review: ${apResult.reason ?? "Quality/source gates not met"}. 1 guide, ${draft.sections.length} sections.`
+        : `Study guide saved as ${config.saveStatus === "editor_review" ? "editor_review" : "draft"}. 1 guide, ${draft.sections.length} sections.`;
+    return {
+      ...result,
+      summary,
+      autoPublished: apResult.published,
+      routedToReviewReason: apResult.routedToReview ? apResult.reason : undefined,
     };
   }
   return {
@@ -192,6 +245,50 @@ export async function saveAIStudyGuideSectionPack(
       normalizedTextPreview: prep.normalizedTextPreview,
       createdByBatchPlanId: options?.batchPlanId ?? null,
     });
+    const { getSourceFrameworkForTrack } = await import("@/lib/admin/autonomous-operations");
+    const framework = await getSourceFrameworkForTrack(config.trackSlug);
+    if (framework?.id && isSupabaseServiceRoleConfigured()) {
+      const supabase = (await import("@/lib/supabase/service")).createServiceClient();
+      await supabase.from("content_source_framework").upsert(
+        { entity_type: "study_guide", entity_id: result.contentId, source_framework_id: framework.id },
+        { onConflict: "entity_type,entity_id" }
+      );
+    }
+    const { ensureContentEvidenceMetadata } = await import("@/lib/admin/source-governance");
+    await ensureContentEvidenceMetadata("study_guide", result.contentId, config.trackSlug, {
+      sourceFrameworkId: framework?.id ?? null,
+    });
+    const { computeStudyGuideQualityScore } = await import("@/lib/ai/content-quality-scoring");
+    const { upsertContentQualityMetadata, runAutoPublishFlow } = await import("@/lib/admin/auto-publish");
+    const quality = computeStudyGuideQualityScore(
+      { title: guideTitle, description: "", sections: draft.sections },
+      "section_pack"
+    );
+    await upsertContentQualityMetadata("study_guide", result.contentId, {
+      qualityScore: quality.qualityScore,
+      autoPublishEligible: quality.autoPublishEligible,
+      validationStatus: quality.validationStatus,
+      validationErrors: quality.validationErrors,
+      generationMetadata: { source: "ai_content_factory", trackId: config.trackId },
+    });
+    const apResult = await runAutoPublishFlow(
+      "study_guide",
+      result.contentId,
+      "study_guide",
+      config.saveStatus ?? "draft",
+      undefined
+    );
+    const summary = apResult.published
+      ? `Section pack auto-published. 1 guide, ${draft.sections.length} sections.`
+      : apResult.routedToReview
+        ? `Section pack routed to editor review: ${apResult.reason ?? "Quality/source gates not met"}. 1 guide, ${draft.sections.length} sections.`
+        : `Section pack saved as ${config.saveStatus === "editor_review" ? "editor_review" : "draft"}. 1 guide, ${draft.sections.length} sections.`;
+    return {
+      ...result,
+      summary,
+      autoPublished: apResult.published,
+      routedToReviewReason: apResult.routedToReview ? apResult.reason : undefined,
+    };
   }
   return {
     ...result,
@@ -246,6 +343,47 @@ export async function saveAIFlashcardDeck(
       normalizedTextPreview: prep.normalizedTextPreview,
       createdByBatchPlanId: options?.batchPlanId ?? null,
     });
+    const { getSourceFrameworkForTrack } = await import("@/lib/admin/autonomous-operations");
+    const framework = await getSourceFrameworkForTrack(config.trackSlug);
+    if (framework?.id && isSupabaseServiceRoleConfigured()) {
+      const supabase = (await import("@/lib/supabase/service")).createServiceClient();
+      await supabase.from("content_source_framework").upsert(
+        { entity_type: "flashcard_deck", entity_id: result.contentId, source_framework_id: framework.id },
+        { onConflict: "entity_type,entity_id" }
+      );
+    }
+    const { ensureContentEvidenceMetadata } = await import("@/lib/admin/source-governance");
+    await ensureContentEvidenceMetadata("flashcard_deck", result.contentId, config.trackSlug, {
+      sourceFrameworkId: framework?.id ?? null,
+    });
+    const { computeFlashcardDeckQualityScore } = await import("@/lib/ai/content-quality-scoring");
+    const { upsertContentQualityMetadata, runAutoPublishFlow } = await import("@/lib/admin/auto-publish");
+    const quality = computeFlashcardDeckQualityScore(draft);
+    await upsertContentQualityMetadata("flashcard_deck", result.contentId, {
+      qualityScore: quality.qualityScore,
+      autoPublishEligible: quality.autoPublishEligible,
+      validationStatus: quality.validationStatus,
+      validationErrors: quality.validationErrors,
+      generationMetadata: { source: "ai_content_factory", trackId: config.trackId },
+    });
+    const apResult = await runAutoPublishFlow(
+      "flashcard_deck",
+      result.contentId,
+      "flashcard_deck",
+      config.saveStatus ?? "draft",
+      undefined
+    );
+    const summary = apResult.published
+      ? `Flashcard deck auto-published. 1 deck, ${draft.cards.length} cards.`
+      : apResult.routedToReview
+        ? `Flashcard deck routed to editor review: ${apResult.reason ?? "Quality/source gates not met"}. 1 deck, ${draft.cards.length} cards.`
+        : `Flashcard deck saved as ${config.saveStatus === "editor_review" ? "editor_review" : "draft"}. 1 deck, ${draft.cards.length} cards.`;
+    return {
+      ...result,
+      summary,
+      autoPublished: apResult.published,
+      routedToReviewReason: apResult.routedToReview ? apResult.reason : undefined,
+    };
   }
   return {
     ...result,
@@ -304,6 +442,52 @@ export async function saveAIHighYieldContent(
       normalizedTextPreview: prep.normalizedTextPreview,
       createdByBatchPlanId: options?.batchPlanId ?? null,
     });
+    const { getSourceFrameworkForTrack } = await import("@/lib/admin/autonomous-operations");
+    const framework = await getSourceFrameworkForTrack(config.trackSlug);
+    if (framework?.id && isSupabaseServiceRoleConfigured()) {
+      const supabase = (await import("@/lib/supabase/service")).createServiceClient();
+      await supabase.from("content_source_framework").upsert(
+        { entity_type: "high_yield_content", entity_id: result.contentId, source_framework_id: framework.id },
+        { onConflict: "entity_type,entity_id" }
+      );
+    }
+    const { ensureContentEvidenceMetadata } = await import("@/lib/admin/source-governance");
+    const hyExt = draft as { primaryReference?: string; guidelineReference?: string; evidenceTier?: number };
+    await ensureContentEvidenceMetadata("high_yield_content", result.contentId, config.trackSlug, {
+      aiPrimarySlug: hyExt.primaryReference ?? null,
+      aiGuidelineSlug: hyExt.guidelineReference ?? null,
+      aiEvidenceTier: hyExt.evidenceTier ?? null,
+      sourceFrameworkId: framework?.id ?? null,
+    });
+    const { computeHighYieldQualityScore } = await import("@/lib/ai/content-quality-scoring");
+    const { upsertContentQualityMetadata, runAutoPublishFlow } = await import("@/lib/admin/auto-publish");
+    const quality = computeHighYieldQualityScore(draft as unknown as Record<string, unknown>, contentType);
+    await upsertContentQualityMetadata("high_yield_content", result.contentId, {
+      qualityScore: quality.qualityScore,
+      autoPublishEligible: quality.autoPublishEligible,
+      validationStatus: quality.validationStatus,
+      validationErrors: quality.validationErrors,
+      generationMetadata: { source: "ai_content_factory", trackId: config.trackId },
+    });
+    const apResult = await runAutoPublishFlow(
+      "high_yield_content",
+      result.contentId,
+      "high_yield_content",
+      config.saveStatus ?? "draft",
+      undefined
+    );
+    const typeLabel = contentType.replace(/_/g, " ");
+    const summary = apResult.published
+      ? `${typeLabel} auto-published.`
+      : apResult.routedToReview
+        ? `${typeLabel} routed to editor review: ${apResult.reason ?? "Quality/source gates not met"}.`
+        : `${typeLabel} saved as ${config.saveStatus === "editor_review" ? "editor_review" : "draft"}.`;
+    return {
+      ...result,
+      summary,
+      autoPublished: apResult.published,
+      routedToReviewReason: apResult.routedToReview ? apResult.reason : undefined,
+    };
   }
   const typeLabel = contentType.replace(/_/g, " ");
   return {

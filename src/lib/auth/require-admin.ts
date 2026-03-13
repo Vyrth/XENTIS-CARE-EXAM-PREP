@@ -4,6 +4,8 @@ import { isAdmin } from "./admin";
 import { PROTECTED_ROUTES } from "@/config/auth";
 import { ADMIN_LOGIN } from "@/config/admin-routes";
 
+const DEBUG = process.env.NODE_ENV === "development" && process.env.DEBUG_ADMIN_AUTH === "1";
+
 /**
  * Canonical admin guard. Use in admin layout, Server Components, and Route Handlers.
  * Redirects to admin login if not authenticated, or dashboard if not admin.
@@ -13,6 +15,9 @@ export async function requireAdmin() {
   if (!user) redirect(ADMIN_LOGIN);
 
   const userIsAdmin = await isAdmin(user.id);
+  if (DEBUG) {
+    console.log("[requireAdmin]", { userId: user.id, email: user.email, userIsAdmin });
+  }
   if (!userIsAdmin) redirect(PROTECTED_ROUTES.DASHBOARD);
 
   return user;

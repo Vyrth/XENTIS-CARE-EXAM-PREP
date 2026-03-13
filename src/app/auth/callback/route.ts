@@ -4,14 +4,17 @@ import { syncProfileFromAuth, getProfile } from "@/lib/auth/profile";
 import { isAdmin } from "@/lib/auth/admin";
 import { getAuthBaseUrl, getSafeRedirectPath } from "@/lib/auth/url";
 import { ADMIN_BASE } from "@/config/admin-routes";
+import { isAdminRoute } from "@/config/routes";
 
 /**
  * Auth callback handler. Supabase redirects here after:
  * - OAuth (Google, Apple)
  * - Magic link (email)
  *
- * Exchanges code for session, syncs profile, and redirects to app.
- * Validates `next` param to prevent open redirect.
+ * Redirect priority (admin intent preserved):
+ * 1. Validated `next` param (admin paths only for admin users)
+ * 2. Admin user with no next -> /admin
+ * 3. Learner -> onboarding or /dashboard
  */
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -37,18 +40,23 @@ export async function GET(request: Request) {
     avatar_url: data.user.user_metadata?.avatar_url ?? undefined,
   });
 
-  // Validated next param overrides default (prevents open redirect)
+  const userIsAdmin = await isAdmin(data.user.id);
   const safeNext = getSafeRedirectPath(nextParam);
+
+  // 1. Validated next param: use if safe. Admin paths only for admin users.
   if (safeNext) {
+    if (isAdminRoute(safeNext) && !userIsAdmin) {
+      return NextResponse.redirect(`${baseUrl}/dashboard`);
+    }
     return NextResponse.redirect(`${baseUrl}${safeNext}`);
   }
 
-  // Default: admins -> /admin; new users -> /onboarding; returning learners -> /dashboard
-  const userIsAdmin = await isAdmin(data.user.id);
+  // 2. Admin user with no next -> /admin
   if (userIsAdmin) {
     return NextResponse.redirect(`${baseUrl}${ADMIN_BASE}`);
   }
 
+  // 3. Learner -> onboarding or /dashboard
   const profile = await getProfile(data.user.id);
   const needsOnboarding = !profile?.onboarding_completed_at;
   const redirectPath = needsOnboarding ? "/onboarding" : "/dashboard";

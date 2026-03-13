@@ -519,6 +519,13 @@ export async function claimNextShard(
 
   const supabase = createServiceClient();
 
+  const staleThreshold = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+  await supabase
+    .from("ai_batch_jobs")
+    .update({ status: "pending", updated_at: new Date().toISOString(), started_at: null })
+    .eq("status", "running")
+    .lt("started_at", staleThreshold);
+
   const { count: running } = await supabase
     .from("ai_batch_jobs")
     .select("id", { count: "exact", head: true })

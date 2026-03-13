@@ -39,7 +39,10 @@ export default async function AdminLoginPage({
         </div>
         <AdminLoginForm returnTo={returnTo} />
         <p className="mt-6 text-center text-sm text-slate-500 dark:text-slate-400">
-          <a href="/login" className="text-indigo-600 dark:text-indigo-400 hover:underline">
+          <a
+            href={`/login?redirectTo=${encodeURIComponent(returnTo)}`}
+            className="text-indigo-600 dark:text-indigo-400 hover:underline"
+          >
             ← Back to student login
           </a>
         </p>

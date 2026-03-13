@@ -7,6 +7,7 @@
 import type { GenerationConfig, ContentType } from "./types";
 import { resolveConfigTrack } from "./resolve-track";
 import type { TrackOption } from "./resolve-track";
+import { CANONICAL_QUESTION_TYPES } from "./question-type-resolver";
 
 export function validateGenerationConfig(
   config: GenerationConfig,
@@ -47,6 +48,13 @@ export function validateGenerationConfig(
 
   if (config.saveStatus && !["draft", "editor_review"].includes(config.saveStatus)) {
     errors.push("Save status must be draft or editor_review");
+  }
+
+  if (contentType === "question") {
+    const slug = (config.itemTypeSlug ?? "single_best_answer").trim().toLowerCase();
+    if (!CANONICAL_QUESTION_TYPES.some((t) => t.slug === slug)) {
+      errors.push(`Question type "${config.itemTypeSlug}" is not supported`);
+    }
   }
 
   return {

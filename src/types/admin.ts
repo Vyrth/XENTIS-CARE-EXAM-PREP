@@ -30,10 +30,10 @@ export const STATUS_LABELS: Record<WorkflowStatus, string> = {
   needs_revision: "Needs Revision",
 };
 
-/** Valid transitions: from -> to[] (includes send-back) */
+/** Valid transitions: from -> to[] (includes send-back). draft/editor_review -> published allowed for auto-publish (gate bypass). */
 export const STATUS_TRANSITIONS: Record<WorkflowStatus, WorkflowStatus[]> = {
-  draft: ["editor_review"],
-  editor_review: ["draft", "needs_revision", "sme_review"],
+  draft: ["editor_review", "published"],
+  editor_review: ["draft", "needs_revision", "sme_review", "published"],
   sme_review: ["editor_review", "needs_revision", "legal_review"],
   legal_review: ["sme_review", "needs_revision", "qa_review"],
   qa_review: ["legal_review", "needs_revision", "approved"],

@@ -15,9 +15,11 @@ import {
 import { loadSourceEvidence } from "@/lib/admin/source-evidence";
 import { loadAIGenerationForContent } from "@/lib/admin/ai-generation-lookup";
 import { loadContentEvidenceMetadataWithNames } from "@/lib/admin/evidence-metadata-loaders";
+import { loadAutoPublishStatus } from "@/lib/admin/auto-publish-status-loader";
 import { QuestionProductionStudio } from "@/components/admin/QuestionProductionStudio";
 import { SourceEvidencePanel } from "@/components/admin/SourceEvidencePanel";
 import { AIGenerationSourcePanel } from "@/components/admin/AIGenerationSourcePanel";
+import { AutoPublishStatusBadge } from "@/components/admin/AutoPublishStatusBadge";
 import { EvidenceSourceGovernancePanel } from "@/components/admin/EvidenceSourceGovernancePanel";
 
 export default async function QuestionEditorPage({
@@ -39,6 +41,7 @@ export default async function QuestionEditorPage({
     sourceEvidence,
     aiGeneration,
     evidenceMetadata,
+    autoPublishStatus,
   ] = await Promise.all([
     loadExamTracks(),
     loadQuestionForEdit(id),
@@ -51,6 +54,7 @@ export default async function QuestionEditorPage({
     loadSourceEvidence("question", id),
     loadAIGenerationForContent("question", id),
     loadContentEvidenceMetadataWithNames("question", id),
+    loadAutoPublishStatus("question", id),
   ]);
 
   const allSubtopics: { id: string; slug: string; name: string; topicId: string }[] = [];
@@ -96,8 +100,17 @@ export default async function QuestionEditorPage({
           Clone question
         </Link>
       </div>
-      {aiGeneration && (
-        <AIGenerationSourcePanel record={aiGeneration} />
+      {(aiGeneration || autoPublishStatus) && (
+        <div className="flex flex-wrap items-center gap-3">
+          {aiGeneration && (
+            <div className="flex-1 min-w-0">
+              <AIGenerationSourcePanel record={aiGeneration} />
+            </div>
+          )}
+          {autoPublishStatus && (
+            <AutoPublishStatusBadge status={autoPublishStatus} className="shrink-0" />
+          )}
+        </div>
       )}
       <EvidenceSourceGovernancePanel
         contentType="question"

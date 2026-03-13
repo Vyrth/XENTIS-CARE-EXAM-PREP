@@ -5,6 +5,10 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { isSupabaseServiceRoleConfigured } from "@/lib/supabase/env";
 import { validateDraft, type QuestionFormData } from "@/lib/admin/question-validation";
 import { ensureSourceEvidenceForAdminContent } from "@/lib/admin/source-evidence";
+import { ensureContentEvidenceMetadata } from "@/lib/admin/source-governance";
+import { getTrackSlug } from "@/lib/admin/source-governance-helpers";
+import { computeQuestionQualityScore } from "@/lib/ai/content-quality-scoring";
+import { upsertContentQualityMetadata, runAutoPublishFlow } from "@/lib/admin/auto-publish";
 
 export interface SaveQuestionResult {
   success: boolean;
@@ -91,6 +95,29 @@ export async function createQuestion(
     }
 
     await ensureSourceEvidenceForAdminContent("question", questionId);
+    const trackSlug = await getTrackSlug(data.examTrackId);
+    if (trackSlug) {
+      await ensureContentEvidenceMetadata("question", questionId, trackSlug, {});
+    }
+
+    const draft = {
+      stem: data.stem.trim(),
+      rationale: data.rationale ?? "",
+      options: data.options.map((o) => ({
+        key: o.key.trim(),
+        text: o.text.trim(),
+        isCorrect: o.isCorrect ?? false,
+      })),
+    };
+    const quality = computeQuestionQualityScore(draft);
+    await upsertContentQualityMetadata("question", questionId, {
+      qualityScore: quality.qualityScore,
+      autoPublishEligible: quality.autoPublishEligible,
+      validationStatus: quality.validationStatus,
+      validationErrors: quality.validationErrors,
+      generationMetadata: data.aiGenerated ? { source: "admin_draft" } : undefined,
+    });
+    await runAutoPublishFlow("question", questionId, "question", "draft", null);
 
     revalidatePath("/admin/questions");
     return { success: true, questionId };
@@ -184,6 +211,32 @@ export async function updateQuestion(
         display_order: 0,
       });
     }
+
+    const trackSlugForUpdate = await getTrackSlug(data.examTrackId);
+    if (trackSlugForUpdate) {
+      await ensureContentEvidenceMetadata("question", questionId, trackSlugForUpdate, {});
+    }
+
+    const { data: row } = await supabase.from("questions").select("status").eq("id", questionId).single();
+    const fromStatus = (row?.status as string) ?? "draft";
+    const draft = {
+      stem: data.stem.trim(),
+      rationale: data.rationale ?? "",
+      options: data.options.map((o) => ({
+        key: o.key.trim(),
+        text: o.text.trim(),
+        isCorrect: o.isCorrect ?? false,
+      })),
+    };
+    const quality = computeQuestionQualityScore(draft);
+    await upsertContentQualityMetadata("question", questionId, {
+      qualityScore: quality.qualityScore,
+      autoPublishEligible: quality.autoPublishEligible,
+      validationStatus: quality.validationStatus,
+      validationErrors: quality.validationErrors,
+      generationMetadata: data.aiGenerated ? { source: "admin_draft" } : undefined,
+    });
+    await runAutoPublishFlow("question", questionId, "question", fromStatus, null);
 
     revalidatePath("/admin/questions");
     revalidatePath(`/admin/questions/${questionId}`);

@@ -1,5 +1,5 @@
 /**
- * Loading state while app layout resolves (auth, profile, onboarding check).
+ * Loading state while app layout resolves (auth, profile).
  * Prevents flash of wrong content before redirect.
  */
 export default function AppLoading() {

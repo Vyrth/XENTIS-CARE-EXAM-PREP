@@ -25,6 +25,7 @@ import { recordGenerationAudit } from "@/lib/ai/audit-logging";
 import { getBackoffMs } from "@/lib/ai/production-pipeline-config";
 import type { HighYieldDraft } from "@/lib/ai/factory/persistence";
 import { validateGenerationConfig } from "@/lib/ai/factory/validation";
+import { resolveQuestionTypeId } from "@/lib/ai/factory/question-type-resolver";
 import type { GenerationConfig } from "@/lib/ai/factory/types";
 import type { StudyGuideSectionPackOutput } from "@/lib/ai/content-factory/types";
 import { loadAllTopicsForAdmin, loadSystemsForTrackAdmin } from "@/lib/admin/question-studio-loaders";
@@ -346,6 +347,15 @@ export async function runBatchJob(
     };
 
     if (contentType === "question") {
+      const questionTypeIdResolved =
+        (await resolveQuestionTypeId(itemTypeSlug)) ?? questionTypeId;
+      if (!questionTypeIdResolved) {
+        await updateBatchProgress(jobId, {
+          status: "failed",
+          errorMessage: `Question type "${itemTypeSlug}" not found. Seed question_types.`,
+        });
+        return { success: false, error: `Question type "${itemTypeSlug}" not found`, jobId };
+      }
       type QuestionDraft = import("@/lib/ai/admin-drafts/types").QuestionDraftOutput | import("@/lib/ai/content-factory/parsers").ExtendedQuestionOutput;
       const questionBuffer: Array<{
         config: GenerationConfig;
@@ -360,7 +370,7 @@ export async function runBatchJob(
           questionBuffer.map((b) => ({
             config: b.config,
             draft: b.draft,
-            questionTypeId: b.questionTypeId,
+            questionTypeId: questionTypeIdResolved,
             auditId: b.auditId,
             createdBy: b.createdBy,
           })),
@@ -425,7 +435,7 @@ export async function runBatchJob(
             questionBuffer.push({
               config,
               draft: result.output!.data,
-              questionTypeId,
+              questionTypeId: questionTypeIdResolved,
               auditId,
               createdBy,
             });

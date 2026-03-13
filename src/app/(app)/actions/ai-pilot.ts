@@ -69,10 +69,7 @@ export async function generatePilotItemAction(
 
   try {
     if (spec.contentType === "question") {
-      const questionTypeId =
-        data.questionTypes.find((qt) => qt.slug === "single_best_answer")?.id ?? data.questionTypes[0]?.id;
-      if (!questionTypeId) return { success: false, error: "No question type found" };
-      const result = await generateQuestionDraft(config, questionTypeId);
+      const result = await generateQuestionDraft(config);
       if (!result.success || !result.draft)
         return { success: false, error: result.error ?? "Generation failed" };
       return {
@@ -169,13 +166,8 @@ export async function savePilotItemAction(
 
   try {
     if (input.contentType === "question") {
-      const questionTypeId =
-        input.questionTypeId ??
-        data.questionTypes.find((qt) => qt.slug === "single_best_answer")?.id ??
-        data.questionTypes[0]?.id;
-      if (!questionTypeId) return { success: false, error: "No question type found" };
       const draft = input.draft as Parameters<typeof saveQuestionDraft>[1];
-      const result = await saveQuestionDraft(config, draft, questionTypeId, input.auditId ?? undefined);
+      const result = await saveQuestionDraft(config, draft, input.auditId ?? undefined);
       return { success: result.success, contentId: result.contentId, error: result.error };
     }
 

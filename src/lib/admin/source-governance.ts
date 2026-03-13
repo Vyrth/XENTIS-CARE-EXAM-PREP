@@ -130,7 +130,9 @@ export async function hasValidSourceMapping(
   trackSlug: string
 ): Promise<{ valid: boolean; reason?: string }> {
   if (!isSupabaseServiceRoleConfigured()) {
-    return { valid: false, reason: "Service not configured" };
+    const r = "Service not configured";
+    console.warn("[source-governance] hasValidSourceMapping failed:", { entityType, entityId, trackSlug, reason: r });
+    return { valid: false, reason: r };
   }
   const supabase = createServiceClient();
 
@@ -142,7 +144,9 @@ export async function hasValidSourceMapping(
     .single();
 
   if (!meta) {
-    return { valid: false, reason: "No evidence metadata" };
+    const r = "No evidence metadata";
+    console.warn("[source-governance] hasValidSourceMapping failed:", { entityType, entityId, trackSlug, reason: r });
+    return { valid: false, reason: r };
   }
 
   const hasPrimary = !!meta.primary_reference_id;
@@ -150,16 +154,17 @@ export async function hasValidSourceMapping(
   const hasSlugs = slugs.length > 0;
 
   if (!hasPrimary && !hasSlugs) {
-    return { valid: false, reason: "Missing primary_reference or source_slugs" };
+    const r = "Missing primary_reference or source_slugs";
+    console.warn("[source-governance] hasValidSourceMapping failed:", { entityType, entityId, trackSlug, reason: r });
+    return { valid: false, reason: r };
   }
 
   if (hasSlugs) {
     const check = await validateSourceSlugsForTrack(trackSlug, slugs);
     if (!check.valid) {
-      return {
-        valid: false,
-        reason: `Unapproved sources: ${check.invalidSlugs.join(", ")}`,
-      };
+      const r = `Unapproved sources: ${check.invalidSlugs.join(", ")}`;
+      console.warn("[source-governance] hasValidSourceMapping failed:", { entityType, entityId, trackSlug, reason: r });
+      return { valid: false, reason: r };
     }
   }
 
@@ -207,6 +212,105 @@ export async function getApprovedSourceIdBySlug(
     .eq("slug", slug)
     .single();
   return data?.id ?? null;
+}
+
+/** Get default approved source for a track (first test_plan, else first source). Used when AI provides no source. */
+export async function getDefaultApprovedSourceForTrack(
+  trackSlug: string
+): Promise<{ id: string; slug: string; evidenceTier: number } | null> {
+  if (!isSupabaseServiceRoleConfigured()) return null;
+  const supabase = createServiceClient();
+  const { data: track } = await supabase
+    .from("exam_tracks")
+    .select("id")
+    .eq("slug", trackSlug)
+    .single();
+  if (!track) return null;
+
+  const { data: links } = await supabase
+    .from("approved_evidence_sources_track")
+    .select("approved_evidence_source_id")
+    .eq("exam_track_id", track.id)
+    .order("approved_evidence_source_id", { ascending: true });
+  if (!links?.length) return null;
+
+  const ids = links.map((l) => l.approved_evidence_source_id).filter(Boolean);
+  const { data: sources } = await supabase
+    .from("approved_evidence_sources")
+    .select("id, slug, evidence_tier, source_type")
+    .in("id", ids)
+    .order("evidence_tier", { ascending: true });
+
+  const sorted = (sources ?? []).sort(
+    (a, b) => (Number(a.evidence_tier) ?? 2) - (Number(b.evidence_tier) ?? 2)
+  );
+  const testPlan = sorted.find((s) => s.source_type === "test_plan");
+  const primary = testPlan ?? sorted[0];
+  if (!primary) return null;
+  return {
+    id: primary.id,
+    slug: primary.slug ?? "",
+    evidenceTier: Number(primary.evidence_tier ?? 2),
+  };
+}
+
+/**
+ * Ensure content_evidence_metadata exists with valid source mapping.
+ * Uses AI-provided slugs if valid; otherwise falls back to default approved source for track.
+ * Call after every content persist so auto-publish is not blocked.
+ */
+export async function ensureContentEvidenceMetadata(
+  entityType: string,
+  entityId: string,
+  trackSlug: string,
+  options?: {
+    aiPrimarySlug?: string | null;
+    aiGuidelineSlug?: string | null;
+    aiEvidenceTier?: number | null;
+    sourceFrameworkId?: string | null;
+  }
+): Promise<{ ok: boolean; reason?: string }> {
+  if (!isSupabaseServiceRoleConfigured()) {
+    return { ok: false, reason: "Service not configured" };
+  }
+
+  const slugs: string[] = [];
+  if (options?.aiPrimarySlug?.trim()) slugs.push(options.aiPrimarySlug.trim());
+  if (options?.aiGuidelineSlug?.trim() && options.aiGuidelineSlug !== options.aiPrimarySlug) {
+    slugs.push(options.aiGuidelineSlug.trim());
+  }
+
+  const validation = slugs.length > 0 ? await validateSourceSlugsForTrack(trackSlug, slugs) : { valid: false, invalidSlugs: [] };
+  const primaryId = options?.aiPrimarySlug ? await getApprovedSourceIdBySlug(options.aiPrimarySlug) : null;
+  const guidelineId = options?.aiGuidelineSlug ? await getApprovedSourceIdBySlug(options.aiGuidelineSlug) : null;
+
+  let primaryReferenceId: string | null = null;
+  let guidelineReferenceId: string | null = null;
+  let sourceSlugs: string[] = [];
+
+  if (validation.valid && primaryId) {
+    primaryReferenceId = primaryId;
+    guidelineReferenceId = validation.valid ? guidelineId : null;
+    sourceSlugs = slugs;
+  } else {
+    const defaultSource = await getDefaultApprovedSourceForTrack(trackSlug);
+    if (!defaultSource) {
+      const r = `No approved evidence sources for track ${trackSlug}`;
+      console.warn("[source-governance] ensureContentEvidenceMetadata failed:", { entityType, entityId, trackSlug, reason: r });
+      return { ok: false, reason: r };
+    }
+    primaryReferenceId = defaultSource.id;
+    sourceSlugs = [defaultSource.slug];
+  }
+
+  await upsertContentEvidenceMetadata(entityType, entityId, {
+    sourceFrameworkId: options?.sourceFrameworkId ?? null,
+    primaryReferenceId,
+    guidelineReferenceId,
+    evidenceTier: options?.aiEvidenceTier ?? null,
+    sourceSlugs,
+  });
+  return { ok: true };
 }
 
 /** Get content evidence metadata for admin UI */

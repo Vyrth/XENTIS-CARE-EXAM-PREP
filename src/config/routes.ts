@@ -2,12 +2,14 @@
  * Single source of truth for route classification.
  * Use these helpers everywhere: middleware, layouts, nav, auth callback.
  *
- * Route types:
+ * Route types (mutually exclusive for protected space):
  * - public: no auth (/, /pricing, etc.)
  * - auth: login/signup (redirect if already authenticated)
- * - admin: /admin/* (excl. /admin/login which is auth)
- * - learner: /dashboard, /practice, etc. (require onboarding + track)
+ * - admin: /admin, /admin/* (excl. /admin/login) — separate protected space, never hits learner logic
+ * - learner: /dashboard, /practice, etc. — require onboarding + track
  * - onboarding: /onboarding
+ *
+ * Admin and learner are separate route groups; admin never runs learner redirect logic.
  */
 
 import {
@@ -115,3 +117,14 @@ export function isBadAdminPath(pathname: string): boolean {
 
 // Re-export for convenience
 export { getAdminRedirectTarget };
+
+/** Barrel object for route classification (use in guards, middleware, nav) */
+export const routeGuard = {
+  isAdminRoute,
+  isLearnerRoute,
+  isPublicRoute,
+  isAuthRoute,
+  isOnboardingRoute,
+  isAuthCallbackRoute,
+  isBadAdminPath,
+} as const;

@@ -3,6 +3,7 @@ import { loadAutonomousSettingsAction, loadSourceFrameworksAction, loadBlueprint
 import { Card } from "@/components/ui/Card";
 import { Icons } from "@/components/ui/icons";
 import { AutonomousSettingsForm } from "./AutonomousSettingsForm";
+import { AutonomousGenerationPanel } from "./AutonomousGenerationPanel";
 
 export default async function AutonomousOperationsPage() {
   const [settings, frameworks, gaps] = await Promise.all([
@@ -21,6 +22,8 @@ export default async function AutonomousOperationsPage() {
           Cadence, source governance, blueprint targets, and auto-publish thresholds.
         </p>
       </div>
+
+      <AutonomousGenerationPanel />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card>
@@ -88,6 +91,7 @@ export default async function AutonomousOperationsPage() {
         </h3>
         <ul className="text-sm text-amber-800 dark:text-amber-300 space-y-1">
           <li>• Every 2h: Process queued shards</li>
+          <li>• Every 12h: Autonomous gap-based generation (when enabled)</li>
           <li>• Daily 02:00 UTC: Nightly underfill campaign</li>
           <li>• Sunday 03:00 UTC: Weekly blueprint rebalance</li>
           <li>• 1st of month 04:00 UTC: Monthly low-coverage</li>
