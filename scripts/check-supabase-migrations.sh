@@ -109,11 +109,37 @@ if [ -n "${GENERATED_FILE:-}" ] && [ -f "$GENERATED_FILE" ]; then
   fi
 fi
 
-# RLS coverage check skipped: this project enables RLS in a dedicated migration (20250306000014)
-# rather than per-table in the same file. Re-enable or refine for new migrations if desired.
-# echo "Checking for RLS coverage on newly created tables..."
-# MISSING_RLS=0
-# for file in supabase/migrations/*.sql; do ...
-# if [ "$MISSING_RLS" -ne 0 ]; then exit 1; fi
+echo "Checking for RLS coverage on newly created tables..."
+MISSING_RLS=0
+# Only require RLS-in-same-file for migrations newer than this (project uses dedicated RLS migration 20250306000014)
+RLS_CUTOFF="20250325000001_question_similarity_index.sql"
+
+for file in supabase/migrations/*.sql; do
+  [ -f "$file" ] || continue
+  case "$file" in *"__tmp_schema_check"*) continue ;; esac
+  basename_file="${file##*/}"
+  [[ "$basename_file" > "$RLS_CUTOFF" ]] || continue
+
+  # grep exits 1 when no match; with set -e we must avoid that killing the script
+  created_tables=$(
+    ( grep -iE 'create[[:space:]]+table([[:space:]]+if[[:space:]]+not[[:space:]]+exists)?' "$file" 2>/dev/null || true ) \
+    | sed -E 's/.*create[[:space:]]+table([[:space:]]+if[[:space:]]+not[[:space:]]+exists)?[[:space:]]+("?public"?\.)?"?([a-zA-Z0-9_]+)"?.*/\3/I' \
+    | sort -u
+  ) || created_tables=""
+
+  if [ -n "${created_tables:-}" ]; then
+    while IFS= read -r table; do
+      [ -n "${table:-}" ] || continue
+      if ! grep -qiE "alter[[:space:]]+table[[:space:]]+(if[[:space:]]+exists[[:space:]]+)?(\"?public\"?\.)?\"?$table\"?[[:space:]]+enable[[:space:]]+row[[:space:]]+level[[:space:]]+security" "$file" 2>/dev/null; then
+        echo "Error: Table '$table' appears to be created in $file without ENABLE ROW LEVEL SECURITY in the same migration."
+        MISSING_RLS=1
+      fi
+    done <<< "$created_tables"
+  fi
+done
+
+if [ "$MISSING_RLS" -ne 0 ]; then
+  exit 1
+fi
 
 echo "Migration safety check passed."
