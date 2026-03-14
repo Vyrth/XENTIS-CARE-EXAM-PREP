@@ -89,12 +89,24 @@ export function generateShards(
       }
     }
 
-    if (topicList.length === 0) continue;
+    // Topic-scoped: use topic list. System-scoped fallback: when no topics, create one entry per system.
+    const effectiveList =
+      topicList.length > 0
+        ? topicList
+        : systems.map((sys) => ({
+            trackId: track.id,
+            trackSlug: track.slug,
+            systemId: sys.id,
+            systemName: sys.name,
+            topicId: undefined as string | undefined,
+            topicName: sys.name,
+          }));
+    if (effectiveList.length === 0) continue;
 
-    const perTopic = Math.max(1, Math.ceil(targetPerTrack / topicList.length));
+    const perTopic = Math.max(1, Math.ceil(targetPerTrack / effectiveList.length));
     let remaining = targetPerTrack;
 
-    for (const tst of topicList) {
+    for (const tst of effectiveList) {
       if (remaining <= 0) break;
       const count = Math.min(perTopic, remaining, chunkSize * 2);
       remaining -= count;

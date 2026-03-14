@@ -13,6 +13,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { isSupabaseServiceRoleConfigured } from "@/lib/supabase/env";
 import { generateContent } from "@/lib/ai/content-factory";
 import { toContentFactoryRequest } from "@/lib/ai/content-factory/adapter";
+import { buildDiversificationContext } from "@/lib/ai/scenario-diversification";
 import {
   saveAIQuestionsBulk,
   saveAIStudyGuideSectionPack,
@@ -173,6 +174,10 @@ export async function processQuestionBatchPlan(
   }
 
   const baseConfig = await buildBaseConfig(batchPlan);
+  if (!baseConfig.trackId?.trim()) {
+    onLog("validation_failed", "Batch plan missing exam_track_id; trackId required for AI content generation");
+    return { saved: 0, failed: 0, duplicate: 0, generated: 0 };
+  }
   const targetCount = batchPlan.target_count;
   const remaining = targetCount - batchPlan.saved_count - batchPlan.failed_count - batchPlan.duplicate_count;
   const chunkSize = Math.min(
@@ -217,7 +222,12 @@ export async function processQuestionBatchPlan(
       }
       await delay(rateLimitMs);
       try {
-        const req = toContentFactoryRequest(config, "question");
+        const diversificationContext = await buildDiversificationContext({
+          trackId: baseConfig.trackId,
+          systemId: topic.systemId,
+          topicId: topic.id,
+        });
+        const req = toContentFactoryRequest(config, "question", { diversificationContext });
         const result = await runWithRetry(() => generateContent(req));
         if (!result.success || result.output?.mode !== "question") {
           failed++;

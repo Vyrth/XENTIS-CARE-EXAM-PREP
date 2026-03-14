@@ -87,8 +87,13 @@ export const PRE_PRACTICE_CONFIG = {
   timeLimitMinutes: 180,
 } as const;
 
-/** System exam: 50+ questions */
-export const SYSTEM_EXAM_MIN_QUESTIONS = 50;
+/** Re-export from central config */
+export {
+  SYSTEM_EXAM_MIN_QUESTIONS,
+  SYSTEM_EXAM_PRACTICE_MIN_QUESTIONS,
+  SYSTEM_EXAM_PRACTICE_IDEAL_QUESTIONS,
+  SYSTEM_EXAM_FORMAL_MIN_QUESTIONS,
+} from "@/config/exam";
 
 /** Readiness exam: shorter diagnostic */
 export const READINESS_CONFIG = {

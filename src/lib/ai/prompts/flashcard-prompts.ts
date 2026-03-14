@@ -88,6 +88,7 @@ Track framing: ${trackFraming}
 
 Rules:
 - Output ONLY valid JSON. No other text.
+- You MUST generate at least 3 cards (minimum required). Generate ${count} cards.
 - Each card: frontText (question/term/scenario), backText (answer), hint (optional), memoryTrick (optional).
 - Cards must be board-relevant and track-appropriate.`;
 
@@ -114,7 +115,7 @@ ${context.sourceText.slice(0, 8000)}
 --- END ---`
     : "";
 
-  const user = `Generate a ${mode.replace(/_/g, " ")} flashcard deck with ${count} cards.
+  const user = `Generate a ${mode.replace(/_/g, " ")} flashcard deck with exactly ${count} cards (minimum 3 required).
 
 Context:
 ${ctxBlock}

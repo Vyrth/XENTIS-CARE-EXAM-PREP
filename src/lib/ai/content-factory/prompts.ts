@@ -84,6 +84,7 @@ export function buildQuestionPrompt(req: ContentFactoryRequest): { system: strin
       topic: req.topic,
       objective: req.objective,
       difficulty: req.difficulty,
+      diversificationContext: req.diversificationContext,
     });
   }
   const context = buildContextBlock(req);
@@ -175,7 +176,8 @@ export function buildFlashcardDeckPrompt(req: ContentFactoryRequest): { system: 
     req,
     `You generate flashcard deck drafts for ${TRACK_NAMES[req.track]} board prep.`
   );
-  const user = `Generate a flashcard deck with ${qty} cards.
+  const qtyClamped = Math.max(qty, 3);
+  const user = `Generate a flashcard deck with exactly ${qtyClamped} cards (minimum 3 required).
 
 Context:
 ${context}

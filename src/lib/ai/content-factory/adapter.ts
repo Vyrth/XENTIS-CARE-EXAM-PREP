@@ -38,7 +38,7 @@ function resolvePMHNPObjective(
 export function toContentFactoryRequest(
   config: GenerationConfig,
   contentMode: ContentMode,
-  options?: { domainName?: string; quantity?: number; sectionCount?: number }
+  options?: { domainName?: string; quantity?: number; sectionCount?: number; diversificationContext?: string }
 ): ContentFactoryRequest {
   const track = TRACK_MAP.includes(config.trackSlug as (typeof TRACK_MAP)[number])
     ? (config.trackSlug as ContentFactoryRequest["track"])
@@ -76,5 +76,6 @@ export function toContentFactoryRequest(
     flashcardDeckMode: config.flashcardDeckMode,
     flashcardStyle: config.flashcardStyle,
     sourceText: config.sourceText,
+    diversificationContext: options?.diversificationContext,
   };
 }

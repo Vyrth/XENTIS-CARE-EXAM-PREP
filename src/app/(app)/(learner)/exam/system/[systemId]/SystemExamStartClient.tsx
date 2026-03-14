@@ -10,7 +10,8 @@ interface SystemExamStartClientProps {
   examName: string;
   questionCount: number;
   canStart: boolean;
-  minRequired: number;
+  practiceMin: number;
+  idealMin: number;
 }
 
 export function SystemExamStartClient({
@@ -18,7 +19,8 @@ export function SystemExamStartClient({
   examName,
   questionCount,
   canStart,
-  minRequired,
+  practiceMin,
+  idealMin,
 }: SystemExamStartClientProps) {
   const router = useRouter();
 
@@ -27,13 +29,26 @@ export function SystemExamStartClient({
     router.push(`/exam/system-${systemId}-${seed}`);
   };
 
+  const showShortSessionWarning = canStart && questionCount < idealMin;
+
   return (
     <div className="p-6 lg:p-8 max-w-2xl mx-auto space-y-8">
       <h1 className="font-heading text-2xl font-bold text-slate-900 dark:text-white">
         {examName}
       </h1>
       <p className="text-slate-600 dark:text-slate-400">
-        {questionCount} questions available. Minimum {minRequired} required.
+        {questionCount} question{questionCount === 1 ? "" : "s"} available.
+        {canStart ? (
+          showShortSessionWarning ? (
+            <span className="block mt-2 text-amber-600 dark:text-amber-400">
+              You can still start a shorter practice session.
+            </span>
+          ) : null
+        ) : (
+          <span className="block mt-2 text-amber-600 dark:text-amber-400">
+            Minimum {practiceMin} questions required to start practice.
+          </span>
+        )}
       </p>
 
       <Card>

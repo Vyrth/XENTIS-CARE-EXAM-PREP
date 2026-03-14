@@ -138,7 +138,7 @@ export default async function MissingContentPage() {
                 {row.systemExamsBelowMin.length > 0 && (
                   <div>
                     <h3 className="text-sm font-medium text-slate-600 dark:text-slate-400 mb-2">
-                      Systems below 50 questions (system exam minimum)
+                      Systems below ideal for full practice (50 questions)
                     </h3>
                     <ul className="list-disc list-inside text-sm text-slate-700 dark:text-slate-300 space-y-1">
                       {row.systemExamsBelowMin.map((s) => (

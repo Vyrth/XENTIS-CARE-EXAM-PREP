@@ -13,6 +13,7 @@ import { BULK_CHUNK_SIZES as BULK_CHUNK } from "@/lib/ai/factory/bulk-persistenc
 import { isSupabaseServiceRoleConfigured } from "@/lib/supabase/env";
 import { generateContent } from "@/lib/ai/content-factory";
 import { toContentFactoryRequest } from "@/lib/ai/content-factory/adapter";
+import { buildDiversificationContext } from "@/lib/ai/scenario-diversification";
 import {
   saveAIQuestion,
   saveAIQuestionsBulk,
@@ -93,31 +94,51 @@ function pickDifficulty(dist: Record<number, number> | undefined): 1 | 2 | 3 | 4
   return 3;
 }
 
-/** Resolve topic IDs for batch: from spec or all topics for track's systems */
-async function resolveTopicIds(
+/** Target for batch generation: topic-scoped or system-scoped */
+type BatchTarget = { id: string; name: string; systemId?: string; systemName?: string; isSystemScoped?: boolean };
+
+/** Resolve targets for batch: topics when available, else system-level when systemIds provided. */
+async function resolveTargets(
   trackId: string,
   topicIds?: string[],
   systemIds?: string[]
-): Promise<{ id: string; name: string; systemId?: string; systemName?: string }[]> {
-  const allTopics = await loadAllTopicsForAdmin();
+): Promise<BatchTarget[]> {
   const systems = systemIds?.length
     ? (await loadSystemsForTrackAdmin(trackId)).filter((s) => systemIds.includes(s.id))
     : await loadSystemsForTrackAdmin(trackId);
   const trackSystemIds = new Set(systems.map((s) => s.id));
   const systemMap = new Map(systems.map((s) => [s.id, s.name]));
+
+  const allTopics = await loadAllTopicsForAdmin();
   let filtered = allTopics.filter((t) => t.systemIds?.some((sid) => trackSystemIds.has(sid)));
   if (topicIds?.length) {
     filtered = filtered.filter((t) => topicIds.includes(t.id));
   }
-  return filtered.map((t) => {
-    const sid = t.systemIds?.[0];
-    return {
-      id: t.id,
-      name: t.name,
-      systemId: sid,
-      systemName: sid ? systemMap.get(sid) : undefined,
-    };
-  });
+
+  if (filtered.length > 0) {
+    return filtered.map((t) => {
+      const sid = t.systemIds?.[0];
+      return {
+        id: t.id,
+        name: t.name,
+        systemId: sid,
+        systemName: sid ? systemMap.get(sid) : undefined,
+        isSystemScoped: false,
+      };
+    });
+  }
+
+  // System-scoped fallback: no topics linked; use systems as targets.
+  if (systems.length > 0) {
+    return systems.map((s) => ({
+      id: s.id,
+      name: s.name,
+      systemId: s.id,
+      systemName: s.name,
+      isSystemScoped: true,
+    }));
+  }
+  return [];
 }
 
 /** Create batch job record */
@@ -256,6 +277,20 @@ export async function runBatchJob(
   const targetCount = job.target_count;
   const topicIds = (job.topic_ids as string[]) ?? [];
   const systemIds = (job.system_ids as string[]) ?? [];
+  const scopeType = topicIds.length > 0 ? "topic" : "system";
+
+  if (process.env.NODE_ENV === "development") {
+    // eslint-disable-next-line no-console
+    console.log("[batch-engine] runBatchJob", {
+      jobId,
+      trackSlug,
+      contentType,
+      scopeType,
+      systemsTargeted: systemIds.length,
+      topicsTargeted: topicIds.length,
+      targetCount,
+    });
+  }
   const quantityPerTopic = job.quantity_per_topic as number | null;
   const difficultyDist = (job.difficulty_distribution as Record<number, number>) ?? {};
   const boardFocus = job.board_focus as string | null;
@@ -270,6 +305,7 @@ export async function runBatchJob(
   let completed = 0;
   let failed = 0;
   let skippedDup = 0;
+  let deadLetterTotal = 0;
   let generatedCount = 0;
   let retryCount = 0;
 
@@ -326,10 +362,12 @@ export async function runBatchJob(
   };
 
   try {
-    const topics = await resolveTopicIds(trackId, topicIds.length ? topicIds : undefined, systemIds.length ? systemIds : undefined);
-    if (topics.length === 0) {
-      await updateBatchProgress(jobId, { status: "failed", errorMessage: "No topics found for track" });
-      return { success: false, error: "No topics found for track", jobId };
+    const targets = await resolveTargets(trackId, topicIds.length ? topicIds : undefined, systemIds.length ? systemIds : undefined);
+    if (targets.length === 0) {
+      const errMsg = "No topics or systems found for track";
+      onLog?.(jobId, "failed", errMsg, { error: errMsg, errorCode: "no_targets", trackId, systemIds, topicIds });
+      await updateBatchProgress(jobId, { status: "failed", errorMessage: errMsg });
+      return { success: false, error: errMsg, jobId };
     }
 
     const baseConfig: GenerationConfig = {
@@ -350,11 +388,13 @@ export async function runBatchJob(
       const questionTypeIdResolved =
         (await resolveQuestionTypeId(itemTypeSlug)) ?? questionTypeId;
       if (!questionTypeIdResolved) {
+        const errMsg = `Question type "${itemTypeSlug}" not found. Seed question_types.`;
+        onLog?.(jobId, "failed", errMsg, { error: errMsg, errorCode: "question_type_missing", itemTypeSlug });
         await updateBatchProgress(jobId, {
           status: "failed",
-          errorMessage: `Question type "${itemTypeSlug}" not found. Seed question_types.`,
+          errorMessage: errMsg,
         });
-        return { success: false, error: `Question type "${itemTypeSlug}" not found`, jobId };
+        return { success: false, error: errMsg, jobId };
       }
       type QuestionDraft = import("@/lib/ai/admin-drafts/types").QuestionDraftOutput | import("@/lib/ai/content-factory/parsers").ExtendedQuestionOutput;
       const questionBuffer: Array<{
@@ -364,10 +404,68 @@ export async function runBatchJob(
         auditId?: string | null;
         createdBy?: string | null;
       }> = [];
+      const validateQuestionItem = (
+        b: (typeof questionBuffer)[0]
+      ): { valid: boolean; reason?: string } => {
+        const { config, draft } = b;
+        if (!config.trackId?.trim()) return { valid: false, reason: "missing trackId" };
+        if (!config.systemId?.trim() && !config.topicId?.trim())
+          return { valid: false, reason: "missing systemId and topicId" };
+        const stem = (draft as { stem?: string }).stem;
+        if (!stem || typeof stem !== "string" || stem.trim().length < 10)
+          return { valid: false, reason: "missing or invalid questionText (stem)" };
+        const opts = (draft as { options?: unknown[] }).options;
+        if (!Array.isArray(opts) || opts.length < 2)
+          return { valid: false, reason: "missing or invalid options (need at least 2)" };
+        const hasCorrect = opts.some(
+          (o) => o && typeof o === "object" && (o as { isCorrect?: boolean }).isCorrect === true
+        );
+        if (!hasCorrect) return { valid: false, reason: "missing correctOption" };
+        const rationale = (draft as { rationale?: string }).rationale;
+        if (!rationale || typeof rationale !== "string" || rationale.trim().length < 10)
+          return { valid: false, reason: "missing or invalid rationale" };
+        return { valid: true };
+      };
+
       const flushQuestionBuffer = async () => {
         if (questionBuffer.length === 0) return;
+        const validated: typeof questionBuffer = [];
+        let validationFailedCount = 0;
+        for (const b of questionBuffer) {
+          const v = validateQuestionItem(b);
+          if (!v.valid) {
+            validationFailedCount++;
+            onLog?.(jobId, "validation_failed", `Question validation failed: ${v.reason}`, {
+              stage: "validation",
+              errorCode: "validation_failed",
+              reason: v.reason,
+            });
+          } else {
+            validated.push(b);
+          }
+        }
+        if (validated.length === 0) {
+          failed += validationFailedCount;
+          onLog?.(jobId, "validation_failed", `All ${validationFailedCount} items failed validation; skipping persistence`, {
+            stage: "validation",
+            errorCode: "validation_failed",
+            failedCount: validationFailedCount,
+          });
+          questionBuffer.length = 0;
+          return;
+        }
+        if (validationFailedCount > 0) {
+          failed += validationFailedCount;
+        }
+        const persistTrackId = validated[0]?.config?.trackId;
+        onLog?.(jobId, "bulk_persist_start", `Persisting ${validated.length} questions (${validationFailedCount} failed validation)`, {
+          stage: "persist_start",
+          trackId: persistTrackId,
+          itemCount: validated.length,
+          validationFailedCount,
+        });
         const bulkResult = await saveAIQuestionsBulk(
-          questionBuffer.map((b) => ({
+          validated.map((b) => ({
             config: b.config,
             draft: b.draft,
             questionTypeId: questionTypeIdResolved,
@@ -379,24 +477,52 @@ export async function runBatchJob(
         completed += bulkResult.insertedCount;
         skippedDup += bulkResult.duplicateCount;
         failed += bulkResult.failedCount;
+        deadLetterTotal += bulkResult.deadLetterCount ?? 0;
+        onLog?.(jobId, "bulk_persist_done", `Persisted: ${bulkResult.insertedCount}, duplicates: ${bulkResult.duplicateCount}, failed: ${bulkResult.failedCount}`, {
+          stage: "persist_done",
+          trackId: persistTrackId,
+          insertedCount: bulkResult.insertedCount,
+          duplicateCount: bulkResult.duplicateCount,
+          failedCount: bulkResult.failedCount,
+          deadLetterCount: bulkResult.deadLetterCount,
+          contentIds: bulkResult.contentIds?.slice(0, 10),
+        });
         if (bulkResult.deadLetterCount > 0) {
-          onLog?.(jobId, "dead_letter", `${bulkResult.deadLetterCount} rows in dead letter`, { deadLetterCount: bulkResult.deadLetterCount });
+          onLog?.(jobId, "dead_letter", `${bulkResult.deadLetterCount} rows in dead letter`, {
+            stage: "dead_letter",
+            deadLetterCount: bulkResult.deadLetterCount,
+            errorCode: "dead_letter",
+          });
+        }
+        if (bulkResult.insertedCount === 0 && validated.length > 0) {
+          onLog?.(jobId, "persist_zero_warning", "Bulk persist completed with 0 inserted items", {
+            stage: "persist_zero",
+            errorCode: "zero_inserted",
+            inputCount: validated.length,
+            duplicateCount: bulkResult.duplicateCount,
+            failedCount: bulkResult.failedCount,
+          });
         }
         questionBuffer.length = 0;
       };
 
-      const perTopic = quantityPerTopic ?? Math.max(1, Math.ceil(targetCount / topics.length));
-      let qGenerated = 0;
-      for (const topic of topics) {
-        if (qGenerated >= targetCount) break;
-        const need = Math.min(perTopic, targetCount - qGenerated);
-        for (let i = 0; i < need; i++) {
-          const config: GenerationConfig = {
-            ...baseConfig,
-            topicId: topic.id,
-            topicName: topic.name,
-            systemId: topic.systemId,
-            systemName: topic.systemName,
+    const perTopic = quantityPerTopic ?? Math.max(1, Math.ceil(targetCount / targets.length));
+    let qGenerated = 0;
+    for (const target of targets) {
+      if (qGenerated >= targetCount) break;
+      const need = Math.min(perTopic, targetCount - qGenerated);
+      const diversificationContext = await buildDiversificationContext({
+        trackId,
+        systemId: target.systemId,
+        topicId: target.isSystemScoped ? undefined : target.id,
+      });
+      for (let i = 0; i < need; i++) {
+        const config: GenerationConfig = {
+          ...baseConfig,
+          topicId: target.isSystemScoped ? undefined : target.id,
+          topicName: target.isSystemScoped ? undefined : target.name,
+          systemId: target.systemId,
+          systemName: target.systemName,
             targetDifficulty: pickDifficulty(difficultyDist),
           };
           const validation = validateGenerationConfig(config, "question");
@@ -407,7 +533,7 @@ export async function runBatchJob(
           }
           await maybeRateLimit();
           const doGen = async () => {
-            const req = toContentFactoryRequest(config, "question");
+            const req = toContentFactoryRequest(config, "question", { diversificationContext });
             return generateContent(req);
           };
           const maxDuplicateRetries = 2;
@@ -418,7 +544,8 @@ export async function runBatchJob(
             result = maxRetries > 0 ? await runWithRetry(doGen) : await doGen();
             if (!result.success || result.output?.mode !== "question") {
               failed++;
-              onLog?.(jobId, "generation_failed", result.error, {
+              onLog?.(jobId, "generation_failed", result.error ?? "Generation failed", {
+                stage: "generation",
                 errorCode: result.errorCode ?? "unknown",
                 error: result.error,
               });
@@ -456,22 +583,24 @@ export async function runBatchJob(
       }
       await flushQuestionBuffer();
     } else if (contentType === "study_guide") {
-      const count = Math.min(targetCount, topics.length);
+      const count = Math.min(targetCount, targets.length);
       for (let i = 0; i < count; i++) {
         await maybeRateLimit();
-        const topic = topics[i % topics.length];
+        const target = targets[i % targets.length];
         const config: GenerationConfig = {
           ...baseConfig,
-          topicId: topic.id,
-          topicName: topic.name,
-          systemId: topic.systemId,
+          topicId: target.isSystemScoped ? undefined : target.id,
+          topicName: target.isSystemScoped ? undefined : target.name,
+          systemId: target.systemId,
+          systemName: target.systemName,
         };
         const mode = studyGuideMode === "full" ? "study_guide" : "study_guide_section_pack";
         const req = toContentFactoryRequest(config, mode, { sectionCount });
         const result = await generateContent(req);
         if (!result.success) {
           failed++;
-          onLog?.(jobId, "generation_failed", result.error, {
+          onLog?.(jobId, "generation_failed", result.error ?? "Generation failed", {
+            stage: "generation",
             errorCode: result.errorCode ?? "unknown",
             error: result.error,
           });
@@ -494,37 +623,39 @@ export async function runBatchJob(
           if (persist.success) completed++;
           else {
             failed++;
-            onLog?.(jobId, "save_error", persist.error ?? "Save failed", { errorCode: "db_failure" });
+            onLog?.(jobId, "save_error", persist.error ?? "Save failed", { stage: "persist", errorCode: "db_failure", error: persist.error });
           }
         } else {
           const pack = output.data as StudyGuideSectionPackOutput;
-          const guideTitle = `Study Guide - ${topic.name}`;
+          const guideTitle = `Study Guide - ${target.name}`;
           const persist = await saveAIStudyGuideSectionPack(config, pack, guideTitle, auditId, { campaignId });
           if (persist.success) completed++;
           else {
             failed++;
-            onLog?.(jobId, "save_error", persist.error ?? "Save failed", { errorCode: "db_failure" });
+            onLog?.(jobId, "save_error", persist.error ?? "Save failed", { stage: "persist", errorCode: "db_failure", error: persist.error });
           }
         }
         await updateBatchProgress(jobId, { completedCount: completed, failedCount: failed, generatedCount });
         emitProgress();
       }
     } else if (contentType === "flashcard_deck") {
-      const count = Math.min(targetCount, topics.length);
+      const count = Math.min(targetCount, targets.length);
       for (let i = 0; i < count; i++) {
         await maybeRateLimit();
-        const topic = topics[i % topics.length];
+        const target = targets[i % targets.length];
         const config: GenerationConfig = {
           ...baseConfig,
-          topicId: topic.id,
-          topicName: topic.name,
-          systemId: topic.systemId,
+          topicId: target.isSystemScoped ? undefined : target.id,
+          topicName: target.isSystemScoped ? undefined : target.name,
+          systemId: target.systemId,
+          systemName: target.systemName,
         };
         const req = toContentFactoryRequest(config, "flashcard_deck");
         const result = await generateContent(req);
         if (!result.success || result.output?.mode !== "flashcard_deck") {
           failed++;
-          onLog?.(jobId, "generation_failed", result.error, {
+          onLog?.(jobId, "generation_failed", result.error ?? "Generation failed", {
+            stage: "generation",
             errorCode: result.errorCode ?? "unknown",
             error: result.error,
           });
@@ -534,18 +665,29 @@ export async function runBatchJob(
         }
         generatedCount++;
         const deck = result.output.data;
-        const auditId = await recordGenerationAudit({
-          contentType: "flashcard_deck",
-          config,
-          createdBy,
-          generationCount: deck.cards?.length ?? 0,
-          batchJobId: jobId,
-        });
-        const persist = await saveAIFlashcardDeck(config, deck, auditId, { campaignId });
-        if (persist.success) completed++;
-        else {
+        const cardCountThisDeck = deck.cards?.length ?? 0;
+        if (cardCountThisDeck < 3) {
           failed++;
-          onLog?.(jobId, "save_error", persist.error ?? "Save failed", { errorCode: "db_failure" });
+          onLog?.(jobId, "validation_failed", "Flashcard deck has fewer than 3 cards; skipping persistence", {
+            stage: "validation",
+            errorCode: "flashcard_deck_too_few_cards",
+            cardCount: cardCountThisDeck,
+            required: 3,
+          });
+        } else {
+          const auditId = await recordGenerationAudit({
+            contentType: "flashcard_deck",
+            config,
+            createdBy,
+            generationCount: cardCountThisDeck,
+            batchJobId: jobId,
+          });
+          const persist = await saveAIFlashcardDeck(config, deck, auditId, { campaignId });
+          if (persist.success) completed++;
+          else {
+            failed++;
+            onLog?.(jobId, "save_error", persist.error ?? "Save failed", { stage: "persist", errorCode: "db_failure", error: persist.error });
+          }
         }
         await updateBatchProgress(jobId, { completedCount: completed, failedCount: failed, generatedCount });
         emitProgress();
@@ -554,22 +696,24 @@ export async function runBatchJob(
       const cardsPerDeck = Math.min(Math.max(cardCount, 15), 25);
       let cardsCompleted = 0;
       const cardTarget = targetCount;
-      let topicIndex = 0;
+      let targetIndex = 0;
       while (cardsCompleted < cardTarget) {
         await maybeRateLimit();
-        const topic = topics[topicIndex % topics.length];
-        topicIndex++;
+        const target = targets[targetIndex % targets.length];
+        targetIndex++;
         const config: GenerationConfig = {
           ...baseConfig,
-          topicId: topic.id,
-          topicName: topic.name,
-          systemId: topic.systemId,
+          topicId: target.isSystemScoped ? undefined : target.id,
+          topicName: target.isSystemScoped ? undefined : target.name,
+          systemId: target.systemId,
+          systemName: target.systemName,
         };
         const req = toContentFactoryRequest(config, "flashcard_deck", { quantity: cardsPerDeck });
         const result = await generateContent(req);
         if (!result.success || result.output?.mode !== "flashcard_deck") {
           failed += cardsPerDeck;
-          onLog?.(jobId, "generation_failed", result.error, {
+          onLog?.(jobId, "generation_failed", result.error ?? "Generation failed", {
+            stage: "generation",
             errorCode: result.errorCode ?? "unknown",
             error: result.error,
           });
@@ -580,20 +724,30 @@ export async function runBatchJob(
         const deck = result.output.data;
         const cardCountThisDeck = deck.cards?.length ?? 0;
         generatedCount += cardCountThisDeck;
-        const auditId = await recordGenerationAudit({
-          contentType: "flashcard_deck",
-          config,
-          createdBy,
-          generationCount: cardCountThisDeck,
-          batchJobId: jobId,
-        });
-        const persist = await saveAIFlashcardDeck(config, deck, auditId, { campaignId });
-        if (persist.success) {
-          cardsCompleted += cardCountThisDeck;
-          completed += cardCountThisDeck;
-        } else {
+        if (cardCountThisDeck < 3) {
           failed += cardCountThisDeck;
-          onLog?.(jobId, "save_error", persist.error ?? "Save failed", { errorCode: "db_failure" });
+          onLog?.(jobId, "validation_failed", "Flashcard deck has fewer than 3 cards; skipping persistence", {
+            stage: "validation",
+            errorCode: "flashcard_deck_too_few_cards",
+            cardCount: cardCountThisDeck,
+            required: 3,
+          });
+        } else {
+          const auditId = await recordGenerationAudit({
+            contentType: "flashcard_deck",
+            config,
+            createdBy,
+            generationCount: cardCountThisDeck,
+            batchJobId: jobId,
+          });
+          const persist = await saveAIFlashcardDeck(config, deck, auditId, { campaignId });
+          if (persist.success) {
+            cardsCompleted += cardCountThisDeck;
+            completed += cardCountThisDeck;
+          } else {
+            failed += cardCountThisDeck;
+            onLog?.(jobId, "save_error", persist.error ?? "Save failed", { stage: "persist", errorCode: "db_failure", error: persist.error });
+          }
         }
         await updateBatchProgress(jobId, {
           completedCount: completed,
@@ -604,22 +758,24 @@ export async function runBatchJob(
         if (cardsCompleted >= cardTarget) break;
       }
     } else if (contentType === "high_yield_summary") {
-      const count = Math.min(targetCount, topics.length);
+      const count = Math.min(targetCount, targets.length);
       for (let i = 0; i < count; i++) {
         await maybeRateLimit();
-        const topic = topics[i % topics.length];
+        const target = targets[i % targets.length];
         const config: GenerationConfig = {
           ...baseConfig,
-          topicId: topic.id,
-          topicName: topic.name,
-          systemId: topic.systemId,
+          topicId: target.isSystemScoped ? undefined : target.id,
+          topicName: target.isSystemScoped ? undefined : target.name,
+          systemId: target.systemId,
+          systemName: target.systemName,
         };
         const contentMode = highYieldType === "compare_contrast_summary" ? "compare_contrast" : highYieldType;
         const req = toContentFactoryRequest(config, contentMode as "high_yield_summary" | "common_confusion" | "board_trap" | "compare_contrast");
         const result = await generateContent(req);
         if (!result.success || !result.output) {
           failed++;
-          onLog?.(jobId, "generation_failed", result.error, {
+          onLog?.(jobId, "generation_failed", result.error ?? "Generation failed", {
+            stage: "generation",
             errorCode: result.errorCode ?? "unknown",
             error: result.error,
           });
@@ -654,7 +810,7 @@ export async function runBatchJob(
         if (persist.success) completed++;
         else {
           failed++;
-          onLog?.(jobId, "save_error", persist.error ?? "Save failed", { errorCode: "db_failure" });
+          onLog?.(jobId, "save_error", persist.error ?? "Save failed", { stage: "persist", errorCode: "db_failure", error: persist.error });
         }
         await updateBatchProgress(jobId, { completedCount: completed, failedCount: failed, generatedCount });
         emitProgress();
@@ -666,26 +822,28 @@ export async function runBatchJob(
         "board_trap",
         "compare_contrast_summary",
       ];
-      let topicIndex = 0;
+      let targetIndex = 0;
       let typeIndex = 0;
       while (completed < targetCount) {
         await maybeRateLimit();
-        const topic = topics[topicIndex % topics.length];
+        const target = targets[targetIndex % targets.length];
         const hyType = HY_TYPES[typeIndex % HY_TYPES.length];
-        topicIndex++;
+        targetIndex++;
         typeIndex++;
         const config: GenerationConfig = {
           ...baseConfig,
-          topicId: topic.id,
-          topicName: topic.name,
-          systemId: topic.systemId,
+          topicId: target.isSystemScoped ? undefined : target.id,
+          topicName: target.isSystemScoped ? undefined : target.name,
+          systemId: target.systemId,
+          systemName: target.systemName,
         };
         const contentMode = hyType === "compare_contrast_summary" ? "compare_contrast" : hyType;
         const req = toContentFactoryRequest(config, contentMode as "high_yield_summary" | "common_confusion" | "board_trap" | "compare_contrast");
         const result = await generateContent(req);
         if (!result.success || !result.output) {
           failed++;
-          onLog?.(jobId, "generation_failed", result.error, {
+          onLog?.(jobId, "generation_failed", result.error ?? "Generation failed", {
+            stage: "generation",
             errorCode: result.errorCode ?? "unknown",
             error: result.error,
           });
@@ -722,18 +880,32 @@ export async function runBatchJob(
         if (persist.success) completed++;
         else {
           failed++;
-          onLog?.(jobId, "save_error", persist.error ?? "Save failed", { errorCode: "db_failure" });
+          onLog?.(jobId, "save_error", persist.error ?? "Save failed", { stage: "persist", errorCode: "db_failure", error: persist.error });
         }
         await updateBatchProgress(jobId, { completedCount: completed, failedCount: failed, generatedCount });
         emitProgress();
       }
     }
 
-    const status: BatchJobStatus = failed > 0 && completed === 0 ? "failed" : "completed";
+    const status: BatchJobStatus = completed === 0 ? "failed" : "completed";
+    const zeroPersistedMsg =
+      completed === 0
+        ? `Job completed with 0 persisted entities (generated: ${generatedCount}, failed: ${failed}, duplicates: ${skippedDup}${deadLetterTotal > 0 ? `, dead_letter: ${deadLetterTotal}` : ""})`
+        : undefined;
     await updateBatchProgress(jobId, {
       status,
       completedAt: new Date().toISOString(),
+      ...(zeroPersistedMsg ? { errorMessage: zeroPersistedMsg } : {}),
     });
+    if (status === "failed" && zeroPersistedMsg) {
+      onLog?.(jobId, "failed", zeroPersistedMsg, {
+        stage: "zero_persisted",
+        errorCode: "zero_persisted",
+        generatedCount,
+        failedCount: failed,
+        skippedDuplicateCount: skippedDup,
+      });
+    }
 
     const progress = await getBatchJobProgress(jobId);
     return { success: true, jobId, progress: progress ?? undefined };

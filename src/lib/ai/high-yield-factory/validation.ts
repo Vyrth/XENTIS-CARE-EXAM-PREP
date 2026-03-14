@@ -43,9 +43,9 @@ export function validateHighYieldPayload(
       if (!p.correctApproach && !p.correct_approach) errors.push("correctApproach is required");
       break;
     case "compare_contrast_summary":
-      if (!p.conceptA) errors.push("conceptA is required");
-      if (!p.conceptB) errors.push("conceptB is required");
-      if (!p.keyDifference) errors.push("keyDifference is required");
+      if (!p.conceptA && !p.concept_a) errors.push("conceptA/concept_a is required");
+      if (!p.conceptB && !p.concept_b) errors.push("conceptB/concept_b is required");
+      if (!p.keyDifference && !p.key_difference) errors.push("keyDifference/key_difference is required");
       break;
   }
 

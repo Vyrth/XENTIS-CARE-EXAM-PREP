@@ -19,6 +19,7 @@ import {
   prepareFlashcardDedupe,
   prepareHighYieldDedupe,
 } from "@/lib/ai/dedupe-check";
+import { checkQuestionDuplicate } from "@/lib/ai/question-dedupe";
 import {
   mapQuestionTypeToExistingSlug,
   mapHighYieldTypeToExistingEnum,
@@ -120,26 +121,28 @@ export async function saveGeneratedQuestionDraft(
     ? toQuestionPayload(draft).stem
     : (draft as QuestionDraftOutput).stem;
   const prep = prepareQuestionDedupe(stem);
-  const dedupeCheck = await checkDedupeBeforeSave({
-    contentType: "question",
-    normalizedHash: prep.normalizedHash,
-    secondaryHash: prep.secondaryHash,
-    scope: scope(config),
-    rawStem: stem,
-    normalizedPreview: prep.normalizedTextPreview,
-  });
-  if (dedupeCheck.isDuplicate) {
+  const dupResult = await checkQuestionDuplicate(
+    {
+      stem,
+      leadIn: (draft as { leadIn?: string }).leadIn,
+      options: (draft as { options?: { key?: string; text?: string }[] }).options,
+      rationale: (draft as { rationale?: string }).rationale,
+    },
+    { examTrackId: config.trackId, topicId: config.topicId, systemId: config.systemId }
+  );
+  if (dupResult.isDuplicate) {
     if (options?.batchPlanId) {
       await recordDuplicateSkipped({
         batchPlanId: options.batchPlanId,
         contentType: "question",
         normalizedHash: prep.normalizedHash,
-        reason: dedupeCheck.reason,
+        reason: dupResult.reason,
         campaignId: options.campaignId,
         shardId: options.shardId,
+        similarityMetadata: dupResult.metadata,
       });
     }
-    return { success: false, error: "Duplicate stem", duplicate: true };
+    return { success: false, error: "Duplicate question (similar stem or content)", duplicate: true };
   }
 
   const status = resolveDraftStatusForGeneratedContent(options?.preferredStatus);

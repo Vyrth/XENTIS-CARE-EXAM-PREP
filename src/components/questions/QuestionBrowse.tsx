@@ -92,18 +92,39 @@ export function QuestionBrowse({
       if (pageNum === 1) setLoading(true);
       else setLoadingMore(true);
 
+      const url = `/api/questions/browse?${params.toString()}`;
       try {
-        const res = await fetch(`/api/questions/browse?${params.toString()}`);
-        if (!res.ok) throw new Error("Failed to fetch");
+        const res = await fetch(url, { cache: "no-store", credentials: "include" });
         const data = await res.json();
-        if (append) {
-          setQuestions((prev) => [...prev, ...(data.questions ?? [])]);
-        } else {
-          setQuestions(data.questions ?? []);
+        const responseTotal = typeof data.total === "number" ? data.total : 0;
+        const responseQuestions = Array.isArray(data.questions) ? data.questions : [];
+
+        if (process.env.NODE_ENV === "development") {
+          console.info("[QuestionBrowse] fetch", {
+            url,
+            status: res.status,
+            ok: res.ok,
+            responseTotal,
+            responseQuestionCount: responseQuestions.length,
+            hasMore: data.hasMore,
+          });
         }
-        setTotal(data.total ?? 0);
-        setHasMore(data.hasMore ?? false);
-      } catch {
+
+        if (!res.ok) {
+          throw new Error(data.error ?? `HTTP ${res.status}`);
+        }
+
+        if (append) {
+          setQuestions((prev) => [...prev, ...responseQuestions]);
+        } else {
+          setQuestions(responseQuestions);
+        }
+        setTotal(responseTotal);
+        setHasMore(Boolean(data.hasMore));
+      } catch (err) {
+        if (process.env.NODE_ENV === "development") {
+          console.warn("[QuestionBrowse] fetch failed", url, err);
+        }
         setQuestions([]);
         setTotal(0);
         setHasMore(false);
@@ -239,7 +260,7 @@ export function QuestionBrowse({
         {total} question{total === 1 ? "" : "s"} • {trackSlug.toUpperCase()} track
       </p>
 
-      {questions.length === 0 ? (
+      {!loading && total === 0 && questions.length === 0 ? (
         <Card className="border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-900/10">
           <div className="text-center py-12">
             <span className="inline-block text-4xl mb-4 text-slate-400">{Icons["help-circle"]}</span>
@@ -248,6 +269,18 @@ export function QuestionBrowse({
             </h2>
             <p className="text-slate-600 dark:text-slate-400">
               Try adjusting filters or clearing some to see more questions.
+            </p>
+          </div>
+        </Card>
+      ) : !loading && questions.length === 0 && total > 0 ? (
+        <Card className="border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-900/10">
+          <div className="text-center py-12">
+            <span className="inline-block text-4xl mb-4 text-slate-400">{Icons["help-circle"]}</span>
+            <h2 className="font-heading text-lg font-semibold text-slate-900 dark:text-white mb-2">
+              Unexpected: {total} questions reported but none loaded
+            </h2>
+            <p className="text-slate-600 dark:text-slate-400 text-sm">
+              Try refreshing. If this persists, check the console for fetch errors.
             </p>
           </div>
         </Card>

@@ -117,9 +117,9 @@ export function normalizeBoardTrap(d: Record<string, unknown>): BoardTrapPayload
 export function normalizeCompareContrast(d: Record<string, unknown>): CompareContrastPayload {
   return {
     title: String(d.title ?? "").trim(),
-    conceptA: String(d.conceptA ?? "").trim(),
-    conceptB: String(d.conceptB ?? "").trim(),
-    keyDifference: String(d.keyDifference ?? "").trim(),
+    conceptA: String(d.conceptA ?? d.concept_a ?? "").trim(),
+    conceptB: String(d.conceptB ?? d.concept_b ?? "").trim(),
+    keyDifference: String(d.keyDifference ?? d.key_difference ?? "").trim(),
     explanation: d.explanation ? String(d.explanation).trim() : undefined,
     suggestedPracticeLink: normalizeSuggestedLink(d.suggestedPracticeLink ?? d.suggested_practice_link) ?? undefined,
     suggestedGuideLink: normalizeSuggestedLink(d.suggestedGuideLink ?? d.suggested_guide_link) ?? undefined,

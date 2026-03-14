@@ -9,6 +9,7 @@
 import { createServiceClient } from "@/lib/supabase/service";
 import { isSupabaseServiceRoleConfigured } from "@/lib/supabase/env";
 import { isLikelyDuplicate } from "@/lib/ai/similarity";
+import { checkStemEmbeddingSimilarity, STEM_SIMILARITY_THRESHOLD } from "@/lib/ai/stem-embedding-dedupe";
 import {
   hashQuestionStem,
   hashGuideTitle,
@@ -40,9 +41,16 @@ export interface CheckDedupeBeforeSaveParams {
   normalizedPreview?: string | null;
 }
 
+export type DedupeReason =
+  | "exact"
+  | "near_duplicate"
+  | "near_duplicate_stem"
+  | "repeated_clinical_pattern"
+  | "repeated_management_angle";
+
 export interface CheckDedupeResult {
   isDuplicate: boolean;
-  reason?: "exact" | "near_duplicate";
+  reason?: DedupeReason;
   existingSourceId?: string;
 }
 
@@ -129,6 +137,15 @@ export async function checkDedupeBeforeSave(
       params.secondaryHash
     );
     if (near.isDuplicate) return { isDuplicate: true, reason: "near_duplicate" };
+
+    const embeddingCheck = await checkStemEmbeddingSimilarity(
+      params.rawStem,
+      params.scope.examTrackId,
+      { topicId: params.scope.topicId, systemId: params.scope.systemId }
+    );
+    if (embeddingCheck.isDuplicate) {
+      return { isDuplicate: true, reason: "near_duplicate" };
+    }
   }
 
   return { isDuplicate: false };
@@ -172,13 +189,24 @@ export async function registerAfterSave(params: RegisterAfterSaveParams): Promis
   return true;
 }
 
+export interface SimilarityMetadata {
+  normalized_stem_hash?: string;
+  normalized_content_hash?: string;
+  stem_similarity?: number;
+  payload_similarity?: number;
+  duplicate_reason?: string;
+  regeneration_attempt?: number;
+}
+
 export interface RecordDuplicateSkippedParams {
   batchPlanId: string;
   contentType: DedupeContentType;
   normalizedHash: string;
-  reason?: "exact" | "near_duplicate";
+  reason?: DedupeReason;
   campaignId?: string | null;
   shardId?: string | null;
+  /** Similarity metadata for auditing (questions) */
+  similarityMetadata?: SimilarityMetadata;
 }
 
 /**
@@ -191,17 +219,49 @@ export async function recordDuplicateSkipped(params: RecordDuplicateSkippedParam
   const current = (plan?.duplicate_count ?? 0) as number;
   await supabase.from("batch_plans").update({ duplicate_count: current + 1, updated_at: new Date().toISOString() }).eq("id", params.batchPlanId);
 
+  const logMetadata: Record<string, unknown> = {
+    contentType: params.contentType,
+    normalizedHash: params.normalizedHash,
+    reason: params.reason ?? "exact",
+  };
+  if (params.similarityMetadata) Object.assign(logMetadata, params.similarityMetadata);
+
   await supabase.from("ai_batch_job_logs").insert({
     batch_plan_id: params.batchPlanId,
     campaign_id: params.campaignId ?? null,
     shard_id: params.shardId ?? null,
     event_type: "duplicate_skipped",
     message: `Duplicate ${params.contentType} skipped (${params.reason ?? "exact"})`,
-    metadata: {
-      contentType: params.contentType,
-      normalizedHash: params.normalizedHash,
-      reason: params.reason ?? "exact",
-    },
+    metadata: logMetadata,
+    log_level: "info",
+  });
+}
+
+/**
+ * Log duplicate rejection for auditing (single-question save, no batch).
+ */
+export async function logDuplicateRejected(params: {
+  contentType: DedupeContentType;
+  normalizedHash: string;
+  reason?: DedupeReason;
+  similarityMetadata?: SimilarityMetadata;
+  examTrackId?: string;
+}): Promise<void> {
+  if (!isSupabaseServiceRoleConfigured()) return;
+  const supabase = createServiceClient();
+  const logMetadata: Record<string, unknown> = {
+    contentType: params.contentType,
+    normalizedHash: params.normalizedHash,
+    reason: params.reason ?? "exact",
+  };
+  if (params.similarityMetadata) Object.assign(logMetadata, params.similarityMetadata);
+  if (params.examTrackId) logMetadata.examTrackId = params.examTrackId;
+
+  await supabase.from("ai_batch_job_logs").insert({
+    batch_plan_id: null,
+    event_type: "duplicate_skipped",
+    message: `Duplicate ${params.contentType} rejected (${params.reason ?? "exact"})`,
+    metadata: logMetadata,
     log_level: "info",
   });
 }

@@ -89,6 +89,7 @@ export default async function ReviewQueuePage({ searchParams }: Props) {
                 <th className="text-left p-4 text-sm font-medium text-slate-500">Title</th>
                 <th className="text-left p-4 text-sm font-medium text-slate-500">Track</th>
                 <th className="text-left p-4 text-sm font-medium text-slate-500">Source</th>
+                <th className="text-left p-4 text-sm font-medium text-slate-500">Flags</th>
                 <th className="text-left p-4 text-sm font-medium text-slate-500">Status</th>
                 <th className="text-left p-4 text-sm font-medium text-slate-500">Actions</th>
               </tr>
@@ -96,7 +97,7 @@ export default async function ReviewQueuePage({ searchParams }: Props) {
             <tbody>
               {backlog.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="p-8 text-center text-slate-500">
+                  <td colSpan={7} className="p-8 text-center text-slate-500">
                     No items in this lane.
                     {trackId ? " Try a different track filter." : ""}
                   </td>
@@ -124,6 +125,26 @@ export default async function ReviewQueuePage({ searchParams }: Props) {
                       <td className="p-4">
                         {item.aiGenerated ? (
                           <AIGeneratedBadge sourceSummary={item.aiSourceSummary} />
+                        ) : (
+                          <span className="text-xs text-slate-400">—</span>
+                        )}
+                      </td>
+                      <td className="p-4">
+                        {item.reviewFlags ? (
+                          <div className="flex flex-wrap gap-1">
+                            {item.reviewFlags.requires_editorial_review && (
+                              <span className="text-xs px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400">Editor</span>
+                            )}
+                            {item.reviewFlags.requires_sme_review && (
+                              <span className="text-xs px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400">SME</span>
+                            )}
+                            {item.reviewFlags.requires_legal_review && (
+                              <span className="text-xs px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400">Legal</span>
+                            )}
+                            {item.reviewFlags.requires_qa_review && (
+                              <span className="text-xs px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400">QA</span>
+                            )}
+                          </div>
                         ) : (
                           <span className="text-xs text-slate-400">—</span>
                         )}

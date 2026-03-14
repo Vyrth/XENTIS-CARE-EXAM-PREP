@@ -12,50 +12,17 @@
 import { createServiceClient } from "@/lib/supabase/service";
 import { isSupabaseServiceRoleConfigured } from "@/lib/supabase/env";
 import { transitionContentStatus } from "@/app/(app)/actions/content-review";
+import { evaluateAutoPublishEligibility } from "./evaluate-auto-publish";
+import { hasAnyReviewFlag, type ReviewFlags } from "./review-flags";
+import { getAutoPublishConfig, type AutoPublishConfig } from "./auto-publish-config";
+import { recordAutoPublishMetric } from "./auto-publish-metrics";
 
-const ENTITY_TYPE_TO_TABLE: Record<string, string> = {
-  question: "questions",
-  study_guide: "study_guides",
-  flashcard_deck: "flashcard_decks",
-  high_yield_content: "high_yield_content",
-};
-
-export interface AutoPublishConfig {
-  contentType: string;
-  enabled: boolean;
-  minQualityScore: number;
-  requireTrackAssigned: boolean;
-  requireNoDuplicate: boolean;
-  requireAnswerRationaleConsistent: boolean;
-  requireSourceMapping: boolean;
-}
+export type { AutoPublishConfig } from "./auto-publish-config";
+export { getAutoPublishConfig } from "./auto-publish-config";
 
 export interface AutoPublishResult {
   published: boolean;
   reason?: string;
-}
-
-/** Load auto-publish config for a content type */
-export async function getAutoPublishConfig(
-  contentType: string
-): Promise<AutoPublishConfig | null> {
-  if (!isSupabaseServiceRoleConfigured()) return null;
-  const supabase = createServiceClient();
-  const { data } = await supabase
-    .from("auto_publish_config")
-    .select("*")
-    .eq("content_type", contentType)
-    .single();
-  if (!data) return null;
-  return {
-    contentType: data.content_type,
-    enabled: !!data.enabled,
-    minQualityScore: Number(data.min_quality_score ?? 70),
-    requireTrackAssigned: !!data.require_track_assigned,
-    requireNoDuplicate: !!data.require_no_duplicate,
-    requireAnswerRationaleConsistent: !!data.require_answer_rationale_consistent,
-    requireSourceMapping: data.require_source_mapping !== false,
-  };
 }
 
 /** Check if content is eligible for auto-publish. Uses evaluateAutoPublishEligibility as source of truth. */
@@ -64,7 +31,6 @@ export async function checkAutoPublishEligibility(
   entityId: string,
   contentType: string
 ): Promise<{ eligible: boolean; reason?: string }> {
-  const { evaluateAutoPublishEligibility } = await import("@/lib/admin/evaluate-auto-publish");
   const eval_ = await evaluateAutoPublishEligibility(entityType, entityId, contentType);
   return { eligible: eval_.eligible, reason: eval_.reason };
 }
@@ -107,22 +73,52 @@ export async function tryAutoPublish(
       reason: "Auto-published by quality gate",
       auto_publish: true,
     });
+    await recordAutoPublishMetric("auto_published", contentType);
+    const { data: meta } = await supabase
+      .from("content_quality_metadata")
+      .select("generation_metadata")
+      .eq("entity_type", entityType)
+      .eq("entity_id", entityId)
+      .single();
+    const existing = (meta?.generation_metadata as Record<string, unknown>) ?? {};
+    await supabase
+      .from("content_quality_metadata")
+      .update({
+        generation_metadata: { ...existing, publish_reason: "high_confidence_auto_publish" } as unknown,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("entity_type", entityType)
+      .eq("entity_id", entityId);
   }
 
   return { published: true };
 }
 
-/** Run auto-publish flow: evaluate eligibility, publish if eligible, else route to editor_review and record reason. */
+/** Run auto-publish flow: evaluate eligibility, publish if eligible (with publish_reason), else route to editor_review with routing_lane and routing_reason. */
 export async function runAutoPublishFlow(
   entityType: string,
   entityId: string,
   contentType: string,
   fromStatus: string,
-  actorId?: string | null
+  actorId?: string | null,
+  options?: { reviewFlags?: ReviewFlags }
 ): Promise<{ published: boolean; routedToReview: boolean; reason?: string }> {
-  const { evaluateAutoPublishEligibility } = await import("@/lib/admin/evaluate-auto-publish");
-
   const eval_ = await evaluateAutoPublishEligibility(entityType, entityId, contentType);
+  const reviewFlags = options?.reviewFlags;
+  const hasFlags = reviewFlags ? hasAnyReviewFlag(reviewFlags) : (eval_.routedTo === "editor_review");
+
+  if (process.env.NODE_ENV === "development" || process.env.DEBUG_AUTO_PUBLISH === "1") {
+    console.info("[auto-publish]", {
+      entityType,
+      entityId,
+      contentType,
+      eligible: eval_.eligible,
+      reason: eval_.reason,
+      routingLane: eval_.routingLane,
+      routingReason: eval_.routingReason,
+      blockReasons: eval_.blockReasons,
+    });
+  }
 
   if (eval_.eligible) {
     const result = await tryAutoPublish(entityType, entityId, contentType, fromStatus, actorId);
@@ -133,18 +129,20 @@ export async function runAutoPublishFlow(
     };
   }
 
-  if (fromStatus === "draft" && eval_.routedTo === "editor_review") {
+  if (fromStatus === "draft") {
     const result = await transitionContentStatus(
       entityType,
       entityId,
       "editor_review",
       actorId ?? null,
-      `Routed to review: ${eval_.reason ?? "Quality/source gates not met"}`,
+      `Routed to review: ${eval_.routingReason ?? eval_.reason ?? "Quality/source gates not met"}`,
       undefined,
       false
     );
     if (result.success && isSupabaseServiceRoleConfigured()) {
       const supabase = createServiceClient();
+      await recordAutoPublishMetric("routed_to_review", contentType);
+      if (eval_.routingLane === "legal") await recordAutoPublishMetric("legal_exception", contentType);
       const { data: row } = await supabase
         .from("content_quality_metadata")
         .select("generation_metadata")
@@ -157,7 +155,9 @@ export async function runAutoPublishFlow(
         .update({
           generation_metadata: {
             ...existing,
-            routedToReviewReason: eval_.reason,
+            routing_lane: eval_.routingLane ?? "editorial",
+            routing_reason: eval_.routingReason ?? eval_.reason,
+            routedToReviewReason: eval_.routingReason ?? eval_.reason,
             routedAt: new Date().toISOString(),
           } as unknown,
           updated_at: new Date().toISOString(),
@@ -170,7 +170,7 @@ export async function runAutoPublishFlow(
   return {
     published: false,
     routedToReview: true,
-    reason: eval_.reason,
+    reason: eval_.routingReason ?? eval_.reason,
   };
 }
 

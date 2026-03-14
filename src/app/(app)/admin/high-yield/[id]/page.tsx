@@ -10,7 +10,7 @@ import {
   loadContentSourcesForAdmin,
   loadContentSourceIdsForEntity,
 } from "@/lib/admin/source-loaders";
-import { loadSourceEvidence } from "@/lib/admin/source-evidence";
+import { loadSourceEvidence, AI_ORIGINAL_AUTHOR_NOTES } from "@/lib/admin/source-evidence";
 import { loadAIGenerationForContent } from "@/lib/admin/ai-generation-lookup";
 import { HighYieldProductionStudio } from "@/components/admin/HighYieldProductionStudio";
 import { SourceEvidencePanel } from "@/components/admin/SourceEvidencePanel";
@@ -78,6 +78,12 @@ export default async function EditHighYieldItemPage({
         initialAuthorNotes={sourceEvidence?.authorNotes}
         sources={sources}
         selectedSourceIds={sourceIds}
+        isAIAutoFilled={
+          !!aiGeneration &&
+          sourceEvidence?.sourceBasis === "internal" &&
+          sourceEvidence?.legalStatus === "original" &&
+          sourceEvidence?.authorNotes === AI_ORIGINAL_AUTHOR_NOTES
+        }
       />
     </div>
   );

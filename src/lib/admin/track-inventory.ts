@@ -4,6 +4,7 @@
 
 import { createServiceClient } from "@/lib/supabase/service";
 import { isSupabaseServiceRoleConfigured } from "@/lib/supabase/env";
+import { SYSTEM_EXAM_PRACTICE_IDEAL_QUESTIONS } from "@/config/exam";
 
 export interface StatusBreakdown {
   draft: number;
@@ -50,8 +51,6 @@ export interface MissingContentByTrack {
   hasPrePracticeTemplate: boolean;
   systemExamsBelowMin: { systemId: string; systemName: string; count: number; minRequired: number }[];
 }
-
-const SYSTEM_EXAM_MIN_QUESTIONS = 50;
 
 async function safeQuery<T>(fn: () => Promise<T>): Promise<T> {
   try {
@@ -254,12 +253,12 @@ export async function loadMissingContentByTrack(): Promise<MissingContentByTrack
 
         const approvedQ = await supabase.from("questions").select("id", { count: "exact", head: true }).eq("exam_track_id", t.id).eq("system_id", sys.id).eq("status", "approved");
         const qCountApproved = approvedQ.count ?? 0;
-        if (qCountApproved > 0 && qCountApproved < SYSTEM_EXAM_MIN_QUESTIONS) {
+        if (qCountApproved > 0 && qCountApproved < SYSTEM_EXAM_PRACTICE_IDEAL_QUESTIONS) {
           systemExamsBelowMin.push({
             systemId: sys.id,
             systemName: sys.name,
             count: qCountApproved,
-            minRequired: SYSTEM_EXAM_MIN_QUESTIONS,
+            minRequired: SYSTEM_EXAM_PRACTICE_IDEAL_QUESTIONS,
           });
         }
       }

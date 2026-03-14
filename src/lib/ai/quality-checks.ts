@@ -24,13 +24,16 @@ const MIN_FLASHCARD_FRONT = 5;
 const MIN_FLASHCARD_BACK = 5;
 
 /** Quality check for question draft */
-export function checkQuestionQuality(draft: {
-  stem: string;
-  rationale?: string;
-  options: { key: string; text: string; isCorrect: boolean }[];
-  itemType?: string;
-  difficulty?: number;
-}): QualityCheckResult {
+export function checkQuestionQuality(
+  draft: {
+    stem: string;
+    rationale?: string;
+    options: { key: string; text: string; isCorrect: boolean; distractorRationale?: string }[];
+    itemType?: string;
+    difficulty?: number;
+  },
+  options?: { lenient?: boolean }
+): QualityCheckResult {
   const payload = {
     stem: draft.stem,
     itemType: draft.itemType ?? "single_best_answer",
@@ -38,7 +41,7 @@ export function checkQuestionQuality(draft: {
     rationale: draft.rationale ?? "",
     difficulty: (draft.difficulty ?? 3) as 1 | 2 | 3 | 4 | 5,
   };
-  const result = validateQuestionPayload(payload);
+  const result = validateQuestionPayload(payload, { lenient: options?.lenient ?? false });
   const warnings: string[] = [];
   const rationaleLen = draft.rationale?.trim().length ?? 0;
   if (result.valid && rationaleLen > 0 && rationaleLen < 30) {

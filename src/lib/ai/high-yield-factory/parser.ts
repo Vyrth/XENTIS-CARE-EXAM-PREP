@@ -57,7 +57,10 @@ export function parseHighYieldOutput(
       return normalizeBoardTrap(parsed);
     }
     case "compare_contrast_summary": {
-      if (!parsed.conceptA || !parsed.conceptB || !parsed.keyDifference) return null;
+      const ca = parsed.conceptA ?? parsed.concept_a;
+      const cb = parsed.conceptB ?? parsed.concept_b;
+      const kd = parsed.keyDifference ?? parsed.key_difference;
+      if (!ca || !cb || !kd) return null;
       return normalizeCompareContrast(parsed);
     }
     default:

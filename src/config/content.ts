@@ -8,3 +8,6 @@
 export const LEARNER_VISIBLE_STATUSES = ["approved", "published"] as const;
 
 export type LearnerVisibleStatus = (typeof LEARNER_VISIBLE_STATUSES)[number];
+
+/** Column name for track linkage on questions table (schema uses exam_track_id, NOT track_id) */
+export const QUESTIONS_TRACK_COLUMN = "exam_track_id" as const;

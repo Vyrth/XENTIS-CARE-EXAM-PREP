@@ -48,6 +48,13 @@ export interface ReviewBacklogItem {
   /** AI generation source summary (if AI-generated) */
   aiGenerated?: boolean;
   aiSourceSummary?: string;
+  /** Per-lane review flags (exception-only routing) */
+  reviewFlags?: {
+    requires_editorial_review: boolean;
+    requires_sme_review: boolean;
+    requires_legal_review: boolean;
+    requires_qa_review: boolean;
+  };
 }
 
 export interface ReviewNoteRow {
@@ -132,11 +139,42 @@ export async function loadReviewBacklog(
     const aiMap = await loadAIGenerationBatch(
       sorted.map((i) => ({ entityType: i.type, entityId: i.id }))
     );
+
+    const byType = new Map<string, string[]>();
+    for (const item of sorted) {
+      const list = byType.get(item.type) ?? [];
+      list.push(item.id);
+      byType.set(item.type, list);
+    }
+    const metaByKey = new Map<string, Record<string, unknown>>();
+    for (const [entityType, ids] of byType) {
+      const { data: metaRows } = await supabase
+        .from("content_quality_metadata")
+        .select("entity_id, generation_metadata")
+        .eq("entity_type", entityType)
+        .in("entity_id", ids);
+      for (const r of metaRows ?? []) {
+        const gm = (r.generation_metadata as Record<string, unknown>) ?? {};
+        if (gm.requires_editorial_review != null || gm.requires_sme_review != null || gm.requires_legal_review != null || gm.requires_qa_review != null) {
+          metaByKey.set(`${entityType}-${r.entity_id}`, {
+            requires_editorial_review: !!gm.requires_editorial_review,
+            requires_sme_review: !!gm.requires_sme_review,
+            requires_legal_review: !!gm.requires_legal_review,
+            requires_qa_review: !!gm.requires_qa_review,
+          });
+        }
+      }
+    }
+
     for (const item of sorted) {
       const rec = aiMap.get(`${item.type}-${item.id}`);
       if (rec) {
         item.aiGenerated = true;
         item.aiSourceSummary = buildGenerationSourceSummary(rec.generationParams);
+      }
+      const flags = metaByKey.get(`${item.type}-${item.id}`);
+      if (flags) {
+        item.reviewFlags = flags as ReviewBacklogItem["reviewFlags"];
       }
     }
 

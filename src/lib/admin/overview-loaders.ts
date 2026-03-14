@@ -12,6 +12,7 @@ import {
 
 export type OverviewInventoryRow = TrackInventoryRow & { highYieldContent?: number };
 import { loadAdminPublishQueue } from "@/lib/admin/loaders";
+import { getAutoPublishMetrics } from "@/lib/admin/auto-publish-metrics";
 
 export interface LearnerSummary {
   totalLearners: number;
@@ -55,6 +56,13 @@ export interface AdminOverviewMetrics {
   };
   /** Autonomous mode summary (generated, auto-published, review, failed, duplicate) */
   autonomousSummary: AutonomousModeSummary;
+  /** High-confidence auto-publish diagnostics (e.g. last 7 days aggregated) */
+  autoPublishMetrics: {
+    auto_published_count: number;
+    routed_to_review_count: number;
+    duplicate_rejected_count: number;
+    legal_exception_count: number;
+  };
   /** Recent error log entries from ai_batch_job_logs */
   recentErrors: { id: string; message: string; errorCode: string | null; createdAt: string }[];
   /** Lowest coverage systems by track (systems with fewest approved questions) */
@@ -368,6 +376,17 @@ async function loadHighYieldCountByTrack(): Promise<Map<string, number>> {
   return result;
 }
 
+/** Load auto-publish metrics (last 7 days aggregated across content types) */
+async function loadAutoPublishMetrics(): Promise<AdminOverviewMetrics["autoPublishMetrics"]> {
+  const rows = await getAutoPublishMetrics({ lastDays: 7 });
+  return {
+    auto_published_count: rows.reduce((s, r) => s + (r.auto_published_count ?? 0), 0),
+    routed_to_review_count: rows.reduce((s, r) => s + (r.routed_to_review_count ?? 0), 0),
+    duplicate_rejected_count: rows.reduce((s, r) => s + (r.duplicate_rejected_count ?? 0), 0),
+    legal_exception_count: rows.reduce((s, r) => s + (r.legal_exception_count ?? 0), 0),
+  };
+}
+
 /** Load full admin overview metrics */
 export async function loadAdminOverviewMetrics(): Promise<AdminOverviewMetrics> {
   const [
@@ -379,6 +398,7 @@ export async function loadAdminOverviewMetrics(): Promise<AdminOverviewMetrics> 
     batchPlans,
     campaigns,
     autonomousSummary,
+    autoPublishMetrics,
     recentErrors,
     lowestCoverage,
     highYieldByTrack,
@@ -391,6 +411,7 @@ export async function loadAdminOverviewMetrics(): Promise<AdminOverviewMetrics> 
     loadBatchPlanCounts(),
     loadCampaignCounts(),
     loadAutonomousModeSummary(),
+    loadAutoPublishMetrics(),
     loadRecentErrors(10),
     loadLowestCoverage(3),
     loadHighYieldCountByTrack(),
@@ -410,6 +431,7 @@ export async function loadAdminOverviewMetrics(): Promise<AdminOverviewMetrics> 
     batchPlans,
     campaigns,
     autonomousSummary,
+    autoPublishMetrics,
     recentErrors,
     lowestCoverage,
   };

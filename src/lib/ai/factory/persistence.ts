@@ -39,8 +39,15 @@ import {
 } from "@/lib/ai/high-yield-factory";
 import { DECK_TYPE_MAP } from "@/lib/ai/flashcard-factory/types";
 import type { QuestionPayload } from "@/lib/ai/question-factory/types";
-import { isLikelyDuplicate } from "@/lib/ai/similarity";
+import { checkQuestionDuplicate } from "@/lib/ai/question-dedupe";
+import { storeStemEmbedding, storeContentEmbedding } from "@/lib/ai/stem-embedding-dedupe";
 import { normalizeForHash, simpleHash } from "@/lib/ai/dedupe-utils";
+import {
+  extractArchetypeFromStem,
+  buildScopeKey,
+  appendToGenerationMemory,
+  type ScenarioArchetype,
+} from "@/lib/ai/scenario-diversification";
 
 const AI_STATUS = "draft" as const; // Always draft; editor_review can be set later
 
@@ -130,7 +137,13 @@ export async function persistQuestion(
         system_id: config.systemId,
         topic_id: config.topicId,
       });
-      stemMetadata = { ...normalized.question.stem_metadata, aiGenerated: true, source: "ai_content_factory" };
+      const archetype = extractArchetypeFromStem(normalized.question.stem, payload.rationale);
+      stemMetadata = {
+        ...normalized.question.stem_metadata,
+        aiGenerated: true,
+        source: "ai_content_factory",
+        scenario_archetype: archetype,
+      };
       stem = normalized.question.stem;
       options = normalized.options.map((o) => ({
         option_key: o.option_key,
@@ -140,12 +153,15 @@ export async function persistQuestion(
         display_order: o.display_order,
       }));
     } else {
+      const rationale = (draft as { rationale?: string }).rationale;
+      const archetype = extractArchetypeFromStem(draft.stem, rationale);
       stemMetadata = {
         leadIn: draft.leadIn,
         instructions: draft.instructions,
         rationale: draft.rationale,
         aiGenerated: true,
         source: "ai_content_factory",
+        scenario_archetype: archetype,
       };
       stem = draft.stem.trim();
       options = draft.options.map((opt, i) => {
@@ -161,7 +177,7 @@ export async function persistQuestion(
       });
     }
 
-    // Duplicate stem guard: exact match (ilike) + fuzzy similarity for near-duplicates
+    // Duplicate guard: exact match + stem/payload similarity (0.82 stem, 0.88 payload)
     const stemTrimmed = stem.trim();
     if (stemTrimmed.length > 0) {
       let dupQuery = supabase
@@ -176,23 +192,30 @@ export async function persistQuestion(
         return { success: false, error: "Duplicate stem in this track/topic scope", duplicate: true };
       }
 
-      // Fuzzy duplicate check: fetch recent stems in same scope, skip if similar
-      let fuzzyQuery = supabase
-        .from("questions")
-        .select("stem")
-        .eq("exam_track_id", config.trackId)
-        .not("stem", "is", null)
-        .limit(80);
-      if (config.topicId) fuzzyQuery = fuzzyQuery.eq("topic_id", config.topicId);
-      else if (config.systemId) fuzzyQuery = fuzzyQuery.eq("system_id", config.systemId);
-      const { data: recentStems } = await fuzzyQuery;
-      if (recentStems?.length) {
-        for (const row of recentStems) {
-          const s = (row as { stem?: string }).stem;
-          if (s && isLikelyDuplicate(stemTrimmed, s, 0.88)) {
-            return { success: false, error: "Similar stem already exists (fuzzy match)", duplicate: true };
-          }
-        }
+      const dedupePayload = {
+        stem: stemTrimmed,
+        leadIn: (stemMetadata as { leadIn?: string }).leadIn ?? (draft as { leadIn?: string }).leadIn,
+        options: (draft as { options?: { key?: string; text?: string }[] }).options,
+        rationale: (stemMetadata as { rationale?: string }).rationale ?? (draft as { rationale?: string }).rationale,
+      };
+      const dupResult = await checkQuestionDuplicate(dedupePayload, {
+        examTrackId: config.trackId,
+        topicId: config.topicId,
+        systemId: config.systemId,
+      });
+      if (dupResult.isDuplicate) {
+        const msg =
+          dupResult.reason === "near_duplicate_stem"
+            ? "Similar stem already exists (semantic match)"
+            : dupResult.reason === "repeated_clinical_pattern"
+              ? "Similar clinical scenario already exists"
+              : "Similar question (stem and content) already exists";
+        return {
+          success: false,
+          error: msg,
+          duplicate: true,
+          duplicateMetadata: dupResult.metadata,
+        };
       }
     }
 
@@ -262,6 +285,30 @@ export async function persistQuestion(
     if (auditId) {
       await supabase.from("ai_generation_audit").update({ content_id: q.id, outcome: "saved" }).eq("id", auditId);
     }
+
+    storeStemEmbedding(q.id, config.trackId, stem).catch(() => {
+      if (process.env.NODE_ENV !== "test") {
+        console.warn("[ai-factory] stem embedding store failed (non-blocking)", { contentId: q.id });
+      }
+    });
+    const payloadForEmbedding = {
+      stem,
+      leadIn: (stemMetadata as { leadIn?: string }).leadIn ?? (draft as { leadIn?: string }).leadIn,
+      options: (draft as { options?: { key?: string; text?: string }[] }).options,
+      rationale: (stemMetadata as { rationale?: string }).rationale ?? (draft as { rationale?: string }).rationale,
+    };
+    storeContentEmbedding(q.id, config.trackId, payloadForEmbedding).catch(() => {
+      if (process.env.NODE_ENV !== "test") {
+        console.warn("[ai-factory] content embedding store failed (non-blocking)", { contentId: q.id });
+      }
+    });
+    const archetypeForMemory: ScenarioArchetype =
+      (stemMetadata.scenario_archetype as ScenarioArchetype | undefined) ??
+      extractArchetypeFromStem(stem, (draft as { rationale?: string }).rationale);
+    appendToGenerationMemory(
+      buildScopeKey(config.trackId, config.systemId, config.topicId),
+      archetypeForMemory
+    ).catch(() => {});
 
     if (process.env.NODE_ENV !== "test") {
       console.log("[ai-factory] question persisted", { contentId: q.id, trackId: config.trackId });

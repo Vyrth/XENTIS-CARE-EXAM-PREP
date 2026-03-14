@@ -12,7 +12,7 @@ import {
   loadContentSourcesForAdmin,
   loadContentSourceIdsForEntity,
 } from "@/lib/admin/source-loaders";
-import { loadSourceEvidence } from "@/lib/admin/source-evidence";
+import { loadSourceEvidence, AI_ORIGINAL_AUTHOR_NOTES } from "@/lib/admin/source-evidence";
 import { loadAIGenerationForContent } from "@/lib/admin/ai-generation-lookup";
 import { loadContentEvidenceMetadataWithNames } from "@/lib/admin/evidence-metadata-loaders";
 import { loadAutoPublishStatus } from "@/lib/admin/auto-publish-status-loader";
@@ -21,6 +21,7 @@ import { SourceEvidencePanel } from "@/components/admin/SourceEvidencePanel";
 import { AIGenerationSourcePanel } from "@/components/admin/AIGenerationSourcePanel";
 import { AutoPublishStatusBadge } from "@/components/admin/AutoPublishStatusBadge";
 import { EvidenceSourceGovernancePanel } from "@/components/admin/EvidenceSourceGovernancePanel";
+import { ReviewFlagsBadge } from "@/components/admin/ReviewFlagsBadge";
 
 export default async function QuestionEditorPage({
   params,
@@ -101,14 +102,19 @@ export default async function QuestionEditorPage({
         </Link>
       </div>
       {(aiGeneration || autoPublishStatus) && (
-        <div className="flex flex-wrap items-center gap-3">
-          {aiGeneration && (
-            <div className="flex-1 min-w-0">
-              <AIGenerationSourcePanel record={aiGeneration} />
-            </div>
-          )}
-          {autoPublishStatus && (
-            <AutoPublishStatusBadge status={autoPublishStatus} className="shrink-0" />
+        <div className="flex flex-col gap-3">
+          <div className="flex flex-wrap items-center gap-3">
+            {aiGeneration && (
+              <div className="flex-1 min-w-0">
+                <AIGenerationSourcePanel record={aiGeneration} />
+              </div>
+            )}
+            {autoPublishStatus && (
+              <AutoPublishStatusBadge status={autoPublishStatus} className="shrink-0" />
+            )}
+          </div>
+          {autoPublishStatus?.reviewFlags && (
+            <ReviewFlagsBadge reviewFlags={autoPublishStatus.reviewFlags} />
           )}
         </div>
       )}
@@ -140,6 +146,12 @@ export default async function QuestionEditorPage({
         initialAuthorNotes={sourceEvidence?.authorNotes}
         sources={sources}
         selectedSourceIds={sourceIds}
+        isAIAutoFilled={
+          !!aiGeneration &&
+          sourceEvidence?.sourceBasis === "internal" &&
+          sourceEvidence?.legalStatus === "original" &&
+          sourceEvidence?.authorNotes === AI_ORIGINAL_AUTHOR_NOTES
+        }
       />
     </div>
   );

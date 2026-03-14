@@ -1,31 +1,18 @@
 /**
  * Track-specific question prompt templates for AI Content Factory.
- * RN → NCLEX-style; FNP → diagnosis/management; PMHNP → psych; LVN → fundamentals.
+ * Uses board profiles (NCLEX_RN, NCLEX_LVN, FNP_BOARD, PMHNP_BOARD) for item-writing style,
+ * clinical setting, cognitive level, rationale/distractor style, safety, and evidence framing.
  */
 
 import { appendTrackStrictInstruction } from "../jade-track-context";
 import type { ExamTrack, QuestionItemType } from "../question-factory/types";
+import { getBoardProfile, buildBoardProfilePromptBlock } from "../board-profiles";
 
 const TRACK_NAMES: Record<ExamTrack, string> = {
   lvn: "LVN/LPN",
   rn: "RN",
   fnp: "FNP",
   pmhnp: "PMHNP",
-};
-
-/** Track-specific quality rules—generator must change tone and emphasis by track */
-const TRACK_FRAMING: Record<ExamTrack, string> = {
-  rn: `RN (NCLEX Style) — Emphasize: prioritization, patient safety, nursing assessment, early intervention, delegation, medication safety, clinical judgment.
-Use nursing process thinking: Assessment → Diagnosis → Planning → Implementation → Evaluation.`,
-
-  fnp: `FNP (Primary Care Boards) — Emphasize: diagnosis, outpatient management, medication selection, screening recommendations, follow-up care, prevention.
-Typical FNP question flow: patient presents with symptoms → identify diagnosis → select best management.`,
-
-  pmhnp: `PMHNP (Psychiatry Boards) — Emphasize: DSM diagnostic distinctions, psychopharmacology, therapy modalities, suicide risk assessment, crisis intervention, substance use disorders.
-Psych questions must often test: diagnosis, best medication, therapy selection, risk assessment.`,
-
-  lvn: `LVN/LPN (Fundamentals) — Emphasize: safe scope of practice, fundamentals, medication administration, documentation, patient safety, infection control.
-Use simple language. Focus on what LVNs do and do not do.`,
 };
 
 /** Approved evidence sources per track (must cite at least one). Slug = primary_reference / guideline_reference. */
@@ -111,6 +98,31 @@ const QUALITY_GUARDRAILS = `Question Quality Guardrails — Reject (do not gener
 - Lack clinical reasoning
 - Would repeat existing questions (vary scenarios and phrasing)`;
 
+/** Diversification prompt for regeneration when duplicate detected */
+export const REGENERATION_DIVERSIFICATION_PROMPT = `REGENERATION REQUIRED — The previous question was too similar to existing content. You MUST create a meaningfully different question by varying ALL of the following:
+1. **Patient profile**: Different age, sex/gender, ethnicity, occupation, comorbidities. Avoid repeating demographics.
+2. **Care setting**: Different venue (ED vs clinic vs inpatient vs home health vs school).
+3. **Clinical angle**: Different presentation, chief complaint, or diagnostic pathway.
+4. **Decision type**: Different clinical decision (e.g., initial workup vs follow-up, acute vs chronic, diagnosis vs management vs prioritization).
+Create a distinctly different scenario and question.`;
+
+/** Diversity dimensions to enforce per batch */
+export const DIVERSITY_DIMENSIONS = `DIVERSITY REQUIREMENTS — Each batch must vary across:
+1. **Age band**: pediatric, adolescent, young adult, middle-aged, older adult, geriatric
+2. **Sex** (where clinically relevant): male, female — do not default to female
+3. **Care setting**: clinic, ED, inpatient, telehealth, follow-up, home health, school, long-term care
+4. **Clinical phase**: assessment, diagnosis, management, complication, prevention, patient education
+5. **Acuity level**: low, moderate, high, critical
+6. **Pharmacology vs non-pharmacology**: mix medication-focused and non-pharmacology (lifestyle, procedures, assessment) questions`;
+
+/** Scenario diversification — prevent repetitive stems like "54-year-old female with abdominal pain" */
+const SCENARIO_DIVERSIFICATION_RULES = `SCENARIO DIVERSIFICATION (CRITICAL — vary every question):
+1. **Clinical presentation**: Vary chief complaint, onset, severity, associated symptoms. Avoid repeating "presents with X" patterns.
+2. **Patient demographics**: Rotate age (pediatric, adult, geriatric), sex/gender, ethnicity, occupation. Avoid defaulting to "54-year-old female."
+3. **Diagnostic modality**: Mix labs, imaging (X-ray, CT, MRI, ECG), physical exam, history. Don't always use the same workup.
+4. **Management decision**: Vary setting (ED, clinic, inpatient), acuity, prior treatments. Test different decision points (initial vs follow-up, acute vs chronic).
+5. **Avoid clichés**: No "54-year-old female with abdominal pain" unless explicitly requested. Create unique, memorable scenarios.`;
+
 /** Weak distractors ruin question quality. Each distractor must be tempting but wrong. */
 const DISTRACTOR_DESIGN_RULES = `Distractor Design Rules (Critical):
 Distractors must be:
@@ -164,11 +176,14 @@ export function buildQuestionPrompt(
     topic?: string;
     objective?: string;
     difficulty?: number;
+    /** When set, appends regeneration diversification rules (for duplicate retry) */
+    diversificationContext?: string;
   }
 ): { system: string; user: string } {
   const ctxBlock = buildContextBlock({ track, ...context });
   const typeGuidance = ITEM_TYPE_GUIDANCE[itemType];
-  const trackFraming = TRACK_FRAMING[track];
+  const boardProfile = getBoardProfile(track);
+  const boardProfileBlock = buildBoardProfilePromptBlock(boardProfile);
 
   const system = `${JADE_QUESTION_PERSONA}
 
@@ -176,7 +191,7 @@ You generate ${itemType.replace(/_/g, " ")} question drafts for ${TRACK_NAMES[tr
 
 Item type: ${typeGuidance}
 
-Track framing: ${trackFraming}
+${boardProfileBlock}
 
 Approved sources for ${TRACK_NAMES[track]}: ${APPROVED_SOURCES_BY_TRACK[track]}
 
@@ -185,6 +200,8 @@ ${EVIDENCE_SOURCE_REQUIREMENTS}
 ${JADE_QUESTION_RULES}
 
 ${QUALITY_GUARDRAILS}
+
+${SCENARIO_DIVERSIFICATION_RULES}
 
 ${CASE_COMPLEXITY_GUIDELINES}
 
@@ -202,7 +219,18 @@ Output rules:
 - Options: key (A,B,C,D), text, isCorrect, distractorRationale for wrong options.
 - Never provide specific medical advice. Educational exam prep only.
 - Board-Style Language Filter: Avoid ambiguous wording, vague symptoms, or missing patient context. Reject your own output if these are present.
-- Post-Generation Self-Check: Stem length > 120 characters; rationale > 200 characters; distractor rationales present for all wrong options.`;
+- Post-Generation Self-Check: Stem length > 120 characters; rationale > 200 characters; distractor rationales present for all wrong options.
+
+FULL STRUCTURED OUTPUT (required for every question):
+- stem (required)
+- answer (implicit via options with isCorrect: true)
+- rationale (required, min 200 chars)
+- distractor rationales (required for each wrong option)
+- guideline citation: primary_reference (required), guideline_reference (optional)
+- system (required)
+- topic (required)
+- difficulty (required, 1-5)
+- attribution_template (required): legal-ready citation string, e.g. "Based on [primary_reference]. [guideline_reference]." for display in rationale footer`;
 
   const sysWithTrack = appendTrackStrictInstruction(system, track);
 
@@ -418,10 +446,14 @@ You may also use object format with key/text/isCorrect. Both formats are accepte
 
   const schema = schemaByType[itemType] ?? baseSchema;
 
+  const diversificationBlock = context.diversificationContext
+    ? `\n\n${context.diversificationContext}\n`
+    : "";
+
   const user = `Generate one ${itemType.replace(/_/g, " ")} question.
 
 Context:
-${ctxBlock}
+${ctxBlock}${diversificationBlock}
 
 Respond with ONLY this JSON (no other text):
 ${schema}`;
@@ -452,6 +484,8 @@ export interface WorkerQuestionContext {
   blueprintTags?: string[];
   difficultyMix?: Record<number, number>;
   questionTypeMix?: Record<string, number>;
+  /** Negative constraints from generation memory (avoid repeated patterns) */
+  negativeConstraints?: string;
 }
 
 export function buildWorkerQuestionPrompt(
@@ -473,7 +507,13 @@ export function buildWorkerQuestionPrompt(
     difficulty: context.difficulty,
   });
 
+  const diversificationBlock = context.negativeConstraints
+    ? `${DIVERSITY_DIMENSIONS}\n\n${context.negativeConstraints}\n\n${SCENARIO_DIVERSIFICATION_RULES}`
+    : `${DIVERSITY_DIMENSIONS}\n\n${SCENARIO_DIVERSIFICATION_RULES}`;
+
   const originalityBlock = `${ORIGINALITY_RULES}
+
+${diversificationBlock}
 
 ${base.system}`;
 

@@ -44,22 +44,46 @@ export default async function QuestionBankPage({ searchParams }: Props) {
   }
 
   const hasQuestions = counts.total > 0;
+  const hasBreakdown =
+    counts.bySystem.length > 0 || counts.byDomain.length > 0 || counts.byTopic.length > 0;
+  const showBrowse =
+    hasBrowseParams ||
+    (hasQuestions && !hasBreakdown);
 
-  if (hasBrowseParams) {
+  if (process.env.NODE_ENV === "development" || process.env.DEBUG_LEARNER_CONTENT === "1") {
+    console.info("[questions:page] server render", {
+      trackId,
+      trackSlug: track,
+      total: counts.total,
+      bySystemCount: counts.bySystem.length,
+      byDomainCount: counts.byDomain.length,
+      byTopicCount: counts.byTopic.length,
+      hasQuestions,
+      hasBreakdown,
+      showBrowse,
+      hasBrowseParams,
+    });
+  }
+
+  if (showBrowse) {
     return (
       <div className="p-6 lg:p-8 space-y-6">
-        <Link
-          href="/questions"
-          className="inline-flex items-center gap-2 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
-        >
-          <span className="inline-block rotate-180">{Icons.chevronRight}</span>
-          Back to Question Bank
-        </Link>
+        {hasBrowseParams && (
+          <Link
+            href="/questions"
+            className="inline-flex items-center gap-2 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+          >
+            <span className="inline-block rotate-180">{Icons.chevronRight}</span>
+            Back to Question Bank
+          </Link>
+        )}
         <h1 className="font-heading text-2xl font-bold text-slate-900 dark:text-white">
           Browse Questions
         </h1>
         <p className="text-slate-600 dark:text-slate-400">
-          Filter by system, domain, topic, and more. {primary && `${track.toUpperCase()} track`}
+          {hasBreakdown
+            ? `Filter by system, domain, topic, and more. ${primary ? `${track.toUpperCase()} track` : ""}`
+            : `${counts.total} question${counts.total === 1 ? "" : "s"} available. ${primary ? `${track.toUpperCase()} track` : ""}`}
         </p>
         <QuestionBrowse
           initialFilters={{ system: params.system, domain: params.domain, topic: params.topic }}

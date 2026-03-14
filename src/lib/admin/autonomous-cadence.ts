@@ -11,7 +11,12 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { isSupabaseServiceRoleConfigured } from "@/lib/supabase/env";
 import { loadRoadmapCoverageGaps } from "./roadmap-coverage-loaders";
 import { getApprovedSourceSlugsForTrack } from "./source-governance";
-import { launchCampaign } from "@/lib/ai/campaign-orchestrator";
+import {
+  launchCampaign,
+  getActiveAutonomousCampaignStatus,
+  markStaleAutonomousCampaignsAsFailed,
+  type ActiveAutonomousCampaignStatus,
+} from "@/lib/ai/campaign-orchestrator";
 import type { CampaignTargets } from "@/lib/ai/campaign-orchestrator";
 import type { SystemCoverageGap, TopicCoverageGap } from "./roadmap-coverage-loaders";
 
@@ -71,16 +76,24 @@ const CONTENT_TO_CAMPAIGN: Record<AutonomousContentType, keyof CampaignTargets> 
   high_yield_content: "high_yield_summary",
 };
 
-/** Load cadence config from autonomous_settings */
+/** Load cadence config from autonomous_settings. Fallback: autonomous_generation_cadence then cadence. */
 export async function getCadenceConfig(): Promise<AutonomousGenerationCadence> {
   if (!isSupabaseServiceRoleConfigured()) return DEFAULT_CADENCE;
   const supabase = createServiceClient();
-  const { data } = await supabase
+  const { data: primary } = await supabase
     .from("autonomous_settings")
     .select("value_json")
     .eq("key", "autonomous_generation_cadence")
     .single();
-  const raw = data?.value_json as Partial<AutonomousGenerationCadence> | null;
+  let raw = primary?.value_json as Partial<AutonomousGenerationCadence> | null;
+  if (!raw) {
+    const { data: fallback } = await supabase
+      .from("autonomous_settings")
+      .select("value_json")
+      .eq("key", "cadence")
+      .single();
+    raw = fallback?.value_json as Partial<AutonomousGenerationCadence> | null;
+  }
   if (!raw) return DEFAULT_CADENCE;
   return {
     ...DEFAULT_CADENCE,
@@ -126,18 +139,21 @@ async function setRunLog(log: Partial<AutonomousRunLog>): Promise<void> {
     );
 }
 
-/** Check if another autonomous campaign is already running */
-async function hasActiveAutonomousCampaign(): Promise<boolean> {
-  if (!isSupabaseServiceRoleConfigured()) return false;
-  const supabase = createServiceClient();
-  const { data } = await supabase
-    .from("ai_campaigns")
-    .select("id")
-    .ilike("name", "Autonomous %")
-    .in("status", ["planned", "running"])
-    .limit(1)
-    .maybeSingle();
-  return !!data;
+/** Check for active autonomous campaign. Marks stale campaigns as failed. Returns status if healthy active campaign blocks launch. */
+async function checkActiveAutonomousCampaign(): Promise<{
+  blocksLaunch: boolean;
+  diagnostic: ActiveAutonomousCampaignStatus | null;
+}> {
+  const status = await getActiveAutonomousCampaignStatus();
+  if (!status) return { blocksLaunch: false, diagnostic: null };
+  if (status.isStale) {
+    const marked = await markStaleAutonomousCampaignsAsFailed();
+    if (marked > 0) {
+      logAutonomous({ phase: "stale-cleanup", campaignId: status.campaignId, reason: status.staleReason });
+    }
+    return { blocksLaunch: false, diagnostic: { ...status, isStale: true, staleReason: status.staleReason } };
+  }
+  return { blocksLaunch: true, diagnostic: status };
 }
 
 /** Build generation plan from gaps. Returns CampaignTargets capped by config. */
@@ -150,7 +166,15 @@ export async function buildGapGenerationPlan(
 
   const gaps = await loadRoadmapCoverageGaps(5, 10);
   if (!gaps.length) {
-    skippedReasons.push("No tracks or taxonomy seeded");
+    skippedReasons.push("No tracks or taxonomy seeded (no exam_tracks or systems)");
+    logAutonomous({ phase: "buildGapPlan", outcome: "skip", reason: "no_gaps", skippedReasons });
+    return { targets, plan, skippedReasons };
+  }
+
+  const hasAnySystems = gaps.some((g) => (g.lowestSystems ?? []).length > 0);
+  if (!hasAnySystems) {
+    skippedReasons.push("No systems found for any track");
+    logAutonomous({ phase: "buildGapPlan", outcome: "skip", reason: "no_systems", skippedReasons });
     return { targets, plan, skippedReasons };
   }
 
@@ -186,6 +210,7 @@ export async function buildGapGenerationPlan(
       const approved = await getApprovedSourceSlugsForTrack(slug);
       if (!approved.length) {
         skippedReasons.push(`No approved evidence sources for track ${slug}`);
+        logAutonomous({ phase: "buildGapPlan", trackSlug: slug, contentType, reason: "no_approved_sources" });
         continue;
       }
 
@@ -193,16 +218,30 @@ export async function buildGapGenerationPlan(
       if (count <= 0) continue;
 
       (targets[campaignKey] as Record<string, number>)[slug] = count;
+      const sysIds = systemGaps.slice(0, 3).map((g) => g.systemId);
+      const topIds = topicGaps.slice(0, 5).map((g) => g.topicId);
+      const scope = topIds.length > 0 ? "topic" : "system";
       plan.push({
         trackId: track.trackId,
         trackSlug: slug,
         contentType,
         targetCount: count,
-        systemIds: systemGaps.slice(0, 3).map((g) => g.systemId),
-        topicIds: topicGaps.slice(0, 5).map((g) => g.topicId),
+        systemIds: sysIds,
+        topicIds: topIds,
+        scope,
       });
     }
   }
+
+  logAutonomous({
+    phase: "buildGapPlan",
+    outcome: plan.length > 0 ? "plan-ready" : "no-gaps",
+    planLength: plan.length,
+    trackSlugs: [...new Set(plan.map((p) => p.trackSlug))],
+    contentTypes: [...new Set(plan.map((p) => p.contentType))],
+    scopeTypes: [...new Set(plan.map((p) => p.scope ?? "topic"))],
+    skippedReasonsCount: skippedReasons.length,
+  });
 
   return { targets, plan, skippedReasons };
 }
@@ -232,6 +271,8 @@ export interface GenerationPlanItem {
   targetCount: number;
   systemIds: string[];
   topicIds: string[];
+  /** "topic" when topicIds present, "system" when system-scoped only */
+  scope?: "topic" | "system";
 }
 
 export interface RunAutonomousResult {
@@ -244,7 +285,20 @@ export interface RunAutonomousResult {
   plan?: GenerationPlanItem[];
   skippedReasons?: string[];
   error?: string;
+  /** Diagnostic when launchCampaign succeeds but shardCount is 0 */
+  shardCountZeroDiagnostic?: string;
+  /** When skipped due to active campaign: id, status, job counts, isStale */
+  activeCampaignDiagnostic?: ActiveAutonomousCampaignStatus;
   log: Record<string, unknown>;
+}
+
+/** Structured log entry for autonomous ops */
+function logAutonomous(entry: Record<string, unknown>): void {
+  const msg = `[autonomous] ${JSON.stringify(entry)}`;
+  if (process.env.NODE_ENV === "development") {
+    // eslint-disable-next-line no-console
+    console.log(msg);
+  }
 }
 
 /** Run autonomous generation (dry run or real) */
@@ -287,15 +341,36 @@ export async function runAutonomousGeneration(dryRun: boolean): Promise<RunAuton
     return { success: true, dryRun, launched: false, skippedReasons: ["Autonomous generation paused"], log };
   }
 
-  const active = await hasActiveAutonomousCampaign();
-  if (active) {
-    log.skippedReason = "Another autonomous campaign already running";
+  const { blocksLaunch, diagnostic } = await checkActiveAutonomousCampaign();
+  if (blocksLaunch && diagnostic) {
+    const reason = `Active campaign ${diagnostic.campaignId} (${diagnostic.status}): ${diagnostic.pendingCount} pending, ${diagnostic.runningCount} running`;
+    log.skippedReason = reason;
+    log.activeCampaignId = diagnostic.campaignId;
+    log.activeCampaignStatus = diagnostic.status;
+    log.activeCampaignPending = diagnostic.pendingCount;
+    log.activeCampaignRunning = diagnostic.runningCount;
+    log.activeCampaignIsStale = diagnostic.isStale;
+    logAutonomous({
+      phase: "launch-blocked",
+      reason: "active_campaign",
+      campaignId: diagnostic.campaignId,
+      status: diagnostic.status,
+      pendingCount: diagnostic.pendingCount,
+      runningCount: diagnostic.runningCount,
+    });
     await setRunLog({
       lastRunAt: new Date().toISOString(),
       lastRunSummary: log,
       lastRunMode: dryRun ? "dry-run" : "real",
     });
-    return { success: true, dryRun, launched: false, skippedReasons: ["Campaign already running"], log };
+    return {
+      success: true,
+      dryRun,
+      launched: false,
+      skippedReasons: [reason],
+      activeCampaignDiagnostic: diagnostic,
+      log,
+    };
   }
 
   const { targets, plan, skippedReasons } = await buildGapGenerationPlan(cadence);
@@ -306,7 +381,16 @@ export async function runAutonomousGeneration(dryRun: boolean): Promise<RunAuton
   );
 
   if (totalTarget === 0 || plan.length === 0) {
-    log.skippedReason = skippedReasons.length ? skippedReasons.join("; ") : "No gaps to fill";
+    const skipReason = skippedReasons.length ? skippedReasons.join("; ") : "No gaps to fill";
+    log.skippedReason = skipReason;
+    logAutonomous({
+      launchMode: dryRun ? "dry-run" : "real",
+      outcome: "skipped",
+      skipReason,
+      skippedReasons,
+      planLength: plan.length,
+      totalTarget,
+    });
     await setRunLog({
       lastRunAt: new Date().toISOString(),
       lastRunSummary: { ...log, skippedReasons },
@@ -324,6 +408,24 @@ export async function runAutonomousGeneration(dryRun: boolean): Promise<RunAuton
 
   log.itemsRequested = totalTarget;
   log.plan = plan;
+  const scopeTypes = [...new Set(plan.map((p) => p.scope ?? "topic"))];
+  log.scopeType = scopeTypes.length > 1 ? "mixed" : scopeTypes[0] ?? "topic";
+  const systemsTargeted = [...new Set(plan.flatMap((p) => p.systemIds))];
+  const topicsTargeted = [...new Set(plan.flatMap((p) => p.topicIds))];
+  log.systemsTargeted = systemsTargeted;
+  log.topicsTargeted = topicsTargeted;
+
+  logAutonomous({
+    launchMode: dryRun ? "dry-run" : "real",
+    outcome: dryRun ? "dry-run-complete" : "launching",
+    trackSlugs: [...new Set(plan.map((p) => p.trackSlug))],
+    contentTypes: [...new Set(plan.map((p) => p.contentType))],
+    scopeType: log.scopeType,
+    systemsTargetedCount: systemsTargeted.length,
+    topicsTargetedCount: topicsTargeted.length,
+    itemsRequested: totalTarget,
+    planLength: plan.length,
+  });
 
   if (dryRun) {
     await setRunLog({
@@ -353,6 +455,22 @@ export async function runAutonomousGeneration(dryRun: boolean): Promise<RunAuton
 
   log.itemsLaunched = result.shardCount ?? 0;
   log.campaignId = result.campaignId ?? null;
+  log.shardsCreated = result.shardCount ?? 0;
+
+  const shardCountZeroDiagnostic =
+    result.success && (result.shardCount ?? 0) === 0 && result.campaignId
+      ? result.shardCountZeroDiagnostic ?? "Campaign created but no batch jobs inserted (all shards may be duplicate/idempotent)"
+      : undefined;
+
+  logAutonomous({
+    launchMode: "real",
+    outcome: result.success ? "launch-complete" : "launch-failed",
+    campaignId: result.campaignId,
+    shardCount: result.shardCount ?? 0,
+    targetTotal: result.targetTotal ?? totalTarget,
+    error: result.error,
+    shardCountZeroDiagnostic: shardCountZeroDiagnostic ?? undefined,
+  });
 
   await setRunLog({
     lastRunAt: new Date().toISOString(),
@@ -370,6 +488,7 @@ export async function runAutonomousGeneration(dryRun: boolean): Promise<RunAuton
     targetTotal: result.targetTotal ?? totalTarget,
     plan,
     error: result.error,
+    shardCountZeroDiagnostic,
     log,
   };
 }

@@ -49,6 +49,8 @@ export interface LaunchCampaignResult {
   targetTotal?: number;
   dryRun?: boolean;
   error?: string;
+  /** Diagnostic when campaign created but shardCount is 0 */
+  shardCountZeroDiagnostic?: string;
 }
 
 export interface CampaignSummary {
@@ -296,6 +298,22 @@ export async function launchCampaign(input: LaunchCampaignInput): Promise<Launch
   const shards = generateCampaignShards(targets, taxonomy, coverage);
   const targetTotal = shards.reduce((acc, s) => acc + s.targetCount, 0);
 
+  const scopeType = [...taxonomy.topicsBySystem.values()].some((arr) => arr.length > 0) ? "topic" : "system";
+  const systemsCount = [...taxonomy.systemsByTrack.values()].reduce((sum, arr) => sum + arr.length, 0);
+  const topicsCount = [...taxonomy.topicsBySystem.values()].reduce((sum, arr) => sum + arr.length, 0);
+  if (process.env.NODE_ENV === "development") {
+    // eslint-disable-next-line no-console
+    console.log("[campaign-orchestrator] launchCampaign", {
+      launchMode: dryRun ? "dry-run" : "real",
+      trackCount: taxonomy.tracks.length,
+      scopeType,
+      systemsCount,
+      topicsCount,
+      shardCount: shards.length,
+      targetTotal,
+    });
+  }
+
   if (taxonomy.tracks.length === 0) {
     return { success: false, error: "No tracks found. Configure exam tracks first." };
   }
@@ -303,10 +321,8 @@ export async function launchCampaign(input: LaunchCampaignInput): Promise<Launch
   if (!hasSystems) {
     return { success: false, error: "No systems found for any track. Add systems to tracks." };
   }
+  // Allow system-scoped launch when topics are empty (shard-generator creates system-level shards).
   const hasTopics = [...taxonomy.topicsBySystem.values()].some((arr) => arr.length > 0);
-  if (!hasTopics) {
-    return { success: false, error: "No topics found. Add topics and link them to systems." };
-  }
   if (shards.length === 0 || targetTotal === 0) {
     return { success: false, error: "No shards to generate. Check track, system, and topic configuration." };
   }
@@ -345,6 +361,8 @@ export async function launchCampaign(input: LaunchCampaignInput): Promise<Launch
   }
 
   let inserted = 0;
+  let skippedDuplicate = 0;
+  let insertErrors: string[] = [];
   for (const shard of shards) {
     const shardIdempotencyKey = `camp:${campaign.id}:${shard.shardKey}:${simpleHash(JSON.stringify(shard))}`;
 
@@ -353,7 +371,10 @@ export async function launchCampaign(input: LaunchCampaignInput): Promise<Launch
       .select("id")
       .eq("idempotency_key", shardIdempotencyKey)
       .maybeSingle();
-    if (existing) continue;
+    if (existing) {
+      skippedDuplicate++;
+      continue;
+    }
 
     const jobSpec: BatchJobSpec = {
       trackId: shard.trackId,
@@ -384,7 +405,27 @@ export async function launchCampaign(input: LaunchCampaignInput): Promise<Launch
       .select("id")
       .single();
 
-    if (!error && job) inserted++;
+    if (!error && job) {
+      inserted++;
+    } else if (error) {
+      insertErrors.push(`${shard.contentType}:${shard.trackSlug}:${error.message}`);
+    }
+  }
+
+  const shardCountZeroDiagnostic =
+    inserted === 0 && shards.length > 0
+      ? `Shards generated: ${shards.length}, inserted: 0. Skipped duplicate: ${skippedDuplicate}. ${insertErrors.length ? `Insert errors: ${insertErrors.slice(0, 3).join("; ")}` : ""}`
+      : undefined;
+
+  if (process.env.NODE_ENV === "development" && (inserted !== shards.length || insertErrors.length > 0)) {
+    // eslint-disable-next-line no-console
+    console.log("[campaign-orchestrator] job insert summary", {
+      shardsGenerated: shards.length,
+      inserted,
+      skippedDuplicate,
+      insertErrors: insertErrors.slice(0, 5),
+      shardCountZeroDiagnostic,
+    });
   }
 
   await supabase
@@ -398,6 +439,7 @@ export async function launchCampaign(input: LaunchCampaignInput): Promise<Launch
     shardCount: inserted,
     targetTotal,
     dryRun: false,
+    shardCountZeroDiagnostic,
   };
 }
 
@@ -507,6 +549,155 @@ export async function getCampaignSummary(campaignId: string): Promise<CampaignSu
     createdAt,
     completedAt,
   };
+}
+
+/** Diagnostic when no shard could be claimed. Call when claimNextShard returns null. */
+export async function getClaimDiagnostic(campaignId: string | null): Promise<{
+  pendingCount: number;
+  runningCount: number;
+  pausedCampaigns: number;
+  atRetryCap: number;
+  reason: string;
+}> {
+  if (!isSupabaseServiceRoleConfigured()) {
+    return { pendingCount: 0, runningCount: 0, pausedCampaigns: 0, atRetryCap: 0, reason: "Supabase not configured" };
+  }
+  const supabase = createServiceClient();
+
+  let query = supabase
+    .from("ai_batch_jobs")
+    .select("id, campaign_id, job_retry_attempt, status")
+    .in("status", ["pending", "queued", "running"]);
+  if (campaignId) query = query.eq("campaign_id", campaignId);
+  const { data: jobs } = await query;
+
+  const pending = (jobs ?? []).filter((j) => j.status === "pending" || j.status === "queued");
+  const running = (jobs ?? []).filter((j) => j.status === "running");
+  const campaignIds = [...new Set(pending.map((j) => j.campaign_id).filter(Boolean))];
+  const { data: paused } =
+    campaignIds.length > 0
+      ? await supabase.from("ai_campaigns").select("id").in("id", campaignIds).eq("status", "paused")
+      : { data: [] };
+  const pausedCount = (paused ?? []).length;
+  const atRetryCap = pending.filter((j) => ((j as { job_retry_attempt?: number }).job_retry_attempt ?? 0) >= MAX_JOB_RETRIES).length;
+
+  let reason = "No pending shards";
+  if (pending.length > 0) {
+    if (pausedCount > 0) reason = `${pending.length} pending but ${pausedCount} campaign(s) paused`;
+    else if (atRetryCap === pending.length) reason = `All ${pending.length} pending jobs at retry cap (${MAX_JOB_RETRIES})`;
+    else if (running.length >= 4) reason = `Concurrency at max (${running.length} running), ${pending.length} pending`;
+    else reason = `Could not claim: ${pending.length} pending, ${running.length} running (check per-track limit)`;
+  }
+
+  return {
+    pendingCount: pending.length,
+    runningCount: running.length,
+    pausedCampaigns: pausedCount,
+    atRetryCap,
+    reason,
+  };
+}
+
+/** Stale threshold: campaigns with no runnable work for this long are marked failed */
+const STALE_CAMPAIGN_HOURS = 6;
+
+export interface ActiveAutonomousCampaignStatus {
+  campaignId: string;
+  campaignName: string;
+  status: string;
+  pendingCount: number;
+  runningCount: number;
+  completedCount: number;
+  failedCount: number;
+  totalJobs: number;
+  hasRunnableJobs: boolean;
+  isStale: boolean;
+  staleReason?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Get active autonomous campaign (planned/running) with job counts and stale detection */
+export async function getActiveAutonomousCampaignStatus(): Promise<ActiveAutonomousCampaignStatus | null> {
+  if (!isSupabaseServiceRoleConfigured()) return null;
+  const supabase = createServiceClient();
+  const { data: campaign } = await supabase
+    .from("ai_campaigns")
+    .select("id, name, status, created_at, updated_at")
+    .ilike("name", "Autonomous %")
+    .in("status", ["planned", "running"])
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (!campaign) return null;
+
+  const { data: jobs } = await supabase
+    .from("ai_batch_jobs")
+    .select("id, status, job_retry_attempt")
+    .eq("campaign_id", campaign.id);
+
+  const pending = (jobs ?? []).filter((j) => j.status === "pending" || j.status === "queued");
+  const running = (jobs ?? []).filter((j) => j.status === "running");
+  const completed = (jobs ?? []).filter((j) => j.status === "completed");
+  const failed = (jobs ?? []).filter((j) => j.status === "failed" || j.status === "cancelled");
+  const runnablePending = pending.filter((j) => ((j as { job_retry_attempt?: number }).job_retry_attempt ?? 0) < MAX_JOB_RETRIES);
+  const hasRunnableJobs = running.length > 0 || runnablePending.length > 0;
+
+  const updatedAt = (campaign.updated_at as string) ?? campaign.created_at;
+  const staleThreshold = new Date(Date.now() - STALE_CAMPAIGN_HOURS * 60 * 60 * 1000);
+  const updatedAtDate = new Date(updatedAt);
+
+  let isStale = false;
+  let staleReason: string | undefined;
+
+  if ((jobs ?? []).length === 0) {
+    isStale = true;
+    staleReason = "Campaign has no batch jobs";
+  } else if (!hasRunnableJobs) {
+    isStale = true;
+    if (pending.length > 0 && runnablePending.length === 0) {
+      staleReason = `All ${pending.length} pending jobs at retry cap (${MAX_JOB_RETRIES})`;
+    } else {
+      staleReason = "No pending or running jobs (all completed/failed/cancelled)";
+    }
+  } else if (running.length === 0 && updatedAtDate < staleThreshold) {
+    isStale = true;
+    staleReason = `No activity for ${STALE_CAMPAIGN_HOURS}+ hours (updated ${updatedAt})`;
+  }
+
+  return {
+    campaignId: campaign.id,
+    campaignName: campaign.name,
+    status: campaign.status,
+    pendingCount: pending.length,
+    runningCount: running.length,
+    completedCount: completed.length,
+    failedCount: failed.length,
+    totalJobs: (jobs ?? []).length,
+    hasRunnableJobs,
+    isStale,
+    staleReason,
+    createdAt: (campaign.created_at as string) ?? "",
+    updatedAt: updatedAt ?? "",
+  };
+}
+
+/** Mark stale autonomous campaigns as failed. Returns count of campaigns marked. */
+export async function markStaleAutonomousCampaignsAsFailed(): Promise<number> {
+  if (!isSupabaseServiceRoleConfigured()) return 0;
+  const status = await getActiveAutonomousCampaignStatus();
+  if (!status || !status.isStale) return 0;
+  const supabase = createServiceClient();
+  const { error } = await supabase
+    .from("ai_campaigns")
+    .update({
+      status: "failed",
+      completed_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", status.campaignId)
+    .in("status", ["planned", "running"]);
+  return error ? 0 : 1;
 }
 
 /** Claim next pending shard for processing (respects concurrency, skips paused campaigns) */

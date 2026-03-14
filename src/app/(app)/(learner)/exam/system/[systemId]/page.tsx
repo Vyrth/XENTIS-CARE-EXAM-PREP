@@ -5,7 +5,7 @@ import { getPrimaryTrack } from "@/lib/auth/track";
 import { canAccessSystemExams } from "@/lib/billing/entitlements";
 import { loadSystemExamBySystemId } from "@/lib/exam/loaders";
 import { loadQuestionIds } from "@/lib/questions/loaders";
-import { SYSTEM_EXAM_MIN_QUESTIONS } from "@/types/exam";
+import { SYSTEM_EXAM_PRACTICE_MIN_QUESTIONS, SYSTEM_EXAM_PRACTICE_IDEAL_QUESTIONS } from "@/config/exam";
 import { SystemExamStartClient } from "./SystemExamStartClient";
 import { UpgradePrompt } from "@/components/billing/UpgradePrompt";
 
@@ -40,7 +40,7 @@ export default async function SystemExamStartPage({ params }: Props) {
   if (!exam) notFound();
 
   const questionCount = questionIds.length;
-  const canStart = questionCount >= SYSTEM_EXAM_MIN_QUESTIONS;
+  const canStart = questionCount >= SYSTEM_EXAM_PRACTICE_MIN_QUESTIONS;
 
   return (
     <SystemExamStartClient
@@ -49,7 +49,8 @@ export default async function SystemExamStartPage({ params }: Props) {
       examName={exam.name}
       questionCount={questionCount}
       canStart={canStart}
-      minRequired={SYSTEM_EXAM_MIN_QUESTIONS}
+      practiceMin={SYSTEM_EXAM_PRACTICE_MIN_QUESTIONS}
+      idealMin={SYSTEM_EXAM_PRACTICE_IDEAL_QUESTIONS}
     />
   );
 }

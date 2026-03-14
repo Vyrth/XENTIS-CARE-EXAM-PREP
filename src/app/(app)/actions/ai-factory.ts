@@ -3,6 +3,8 @@
 import { withAdminAIGuard } from "@/lib/auth/admin-ai-guard";
 import { generateContent } from "@/lib/ai/content-factory";
 import { toContentFactoryRequest } from "@/lib/ai/content-factory/adapter";
+import { checkQuestionDuplicate } from "@/lib/ai/question-dedupe";
+import { REGENERATION_DIVERSIFICATION_PROMPT } from "@/lib/ai/prompts/question-prompts";
 import { loadExamTracks } from "@/lib/admin/loaders";
 import { resolveConfigTrack } from "@/lib/ai/factory/resolve-track";
 import {
@@ -132,49 +134,78 @@ export async function generateQuestionDraft(config: GenerationConfig): Promise<{
     };
   }
 
-  const req = toContentFactoryRequest(resolved, "question");
-  await logBatchEvent({
-    eventType: "generation_requested",
-    message: "Single question generation requested",
-    metadata: {
-      contentType: "question",
-      trackId: resolved.trackId,
-      trackSlug: resolved.trackSlug,
-      systemId: resolved.systemId,
-      topicId: resolved.topicId,
-    },
-  });
+  const MAX_DEDUPE_RETRIES = 2;
 
-  const result = await generateContent(req);
-  if (!result.success || result.output?.mode !== "question") {
-    return { success: false, error: result.error ?? "Generation failed" };
+  for (let attempt = 0; attempt <= MAX_DEDUPE_RETRIES; attempt++) {
+    const req = toContentFactoryRequest(resolved, "question", {
+      diversificationContext: attempt > 0 ? REGENERATION_DIVERSIFICATION_PROMPT : undefined,
+    });
+    await logBatchEvent({
+      eventType: "generation_requested",
+      message: attempt === 0 ? "Single question generation requested" : `Regeneration attempt ${attempt} (duplicate detected)`,
+      metadata: {
+        contentType: "question",
+        trackId: resolved.trackId,
+        trackSlug: resolved.trackSlug,
+        systemId: resolved.systemId,
+        topicId: resolved.topicId,
+        regenerationAttempt: attempt,
+      },
+    });
+
+    const result = await generateContent(req);
+    if (!result.success || result.output?.mode !== "question") {
+      return { success: false, error: result.error ?? "Generation failed" };
+    }
+
+    const data = result.output.data;
+    const dupResult = await checkQuestionDuplicate(
+      {
+        stem: data.stem,
+        leadIn: data.leadIn,
+        options: data.options,
+        rationale: data.rationale,
+      },
+      {
+        examTrackId: resolved.trackId,
+        topicId: resolved.topicId,
+        systemId: resolved.systemId,
+      },
+      { regenerationAttempt: attempt }
+    );
+
+    if (!dupResult.isDuplicate) {
+      const auditId = await recordGenerationAudit({
+        contentType: "question",
+        config: resolved,
+        createdBy: guard.userId,
+        generationCount: 1,
+      });
+
+      return {
+        success: true,
+        draft: {
+          stem: data.stem,
+          leadIn: data.leadIn,
+          instructions: data.instructions,
+          options: data.options.map((o) => ({
+            key: o.key,
+            text: o.text,
+            isCorrect: o.isCorrect,
+            distractorRationale: o.distractorRationale,
+          })),
+          rationale: data.rationale,
+          itemType: resolved.itemTypeSlug ?? "single_best_answer",
+          difficulty: config.targetDifficulty ?? 3,
+        },
+        auditId: auditId ?? undefined,
+      };
+    }
   }
 
-  const auditId = await recordGenerationAudit({
-    contentType: "question",
-    config: resolved,
-    createdBy: guard.userId,
-    generationCount: 1,
-  });
-
-  const data = result.output.data;
   return {
-    success: true,
-    draft: {
-      stem: data.stem,
-      leadIn: data.leadIn,
-      instructions: data.instructions,
-      options: data.options.map((o) => ({
-        key: o.key,
-        text: o.text,
-        isCorrect: o.isCorrect,
-        distractorRationale: o.distractorRationale,
-      })),
-      rationale: data.rationale,
-      itemType: resolved.itemTypeSlug ?? "single_best_answer",
-      difficulty: config.targetDifficulty ?? 3,
-    },
-    auditId: auditId ?? undefined,
+    success: false,
+    error: "Generated question was too similar to existing content. Please try a different topic or system.",
   };
 }
 

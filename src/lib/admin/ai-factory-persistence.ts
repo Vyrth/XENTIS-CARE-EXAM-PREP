@@ -27,6 +27,7 @@ import {
   checkDedupeBeforeSave,
   registerAfterSave,
   recordDuplicateSkipped,
+  logDuplicateRejected,
   prepareGuideDedupe,
   prepareFlashcardDedupe,
   prepareHighYieldDedupe,
@@ -41,6 +42,20 @@ import type {
 } from "@/lib/ai/content-factory/types";
 import type { HighYieldDraft } from "@/lib/ai/factory/persistence";
 import { isSupabaseServiceRoleConfigured } from "@/lib/supabase/env";
+import { createServiceClient } from "@/lib/supabase/service";
+import { getSourceFrameworkForTrack } from "@/lib/admin/autonomous-operations";
+import { ensureContentEvidenceMetadata } from "@/lib/admin/source-governance";
+import { ensureSourceEvidenceForAIGeneratedContent } from "@/lib/admin/source-evidence";
+import {
+  computeQuestionQualityScore,
+  computeStudyGuideQualityScore,
+  computeFlashcardDeckQualityScore,
+  computeHighYieldQualityScore,
+} from "@/lib/ai/content-quality-scoring";
+import { validateQuestionMedically } from "@/lib/ai/ai-medical-validator";
+import { upsertContentQualityMetadata, runAutoPublishFlow } from "@/lib/admin/auto-publish";
+import { computeReviewFlags } from "@/lib/admin/review-flags";
+import { bulkPersistQuestions } from "@/lib/ai/factory/bulk-persistence";
 
 /** Extended persist result with admin-facing summary */
 export interface AIPersistResult {
@@ -68,47 +83,96 @@ export async function saveAIQuestion(
 ): Promise<AIPersistResult> {
   const result = await persistQuestion(config, draft, questionTypeId, auditId, createdBy);
   if (!result.success) {
+    if (result.duplicate && result.duplicateMetadata) {
+      await logDuplicateRejected({
+        contentType: "question",
+        normalizedHash: result.duplicateMetadata.normalized_stem_hash,
+        reason: (result.duplicateMetadata.duplicate_reason as "near_duplicate_stem" | "repeated_clinical_pattern" | "repeated_management_angle") ?? "near_duplicate",
+        similarityMetadata: result.duplicateMetadata,
+        examTrackId: config.trackId,
+      });
+      const { recordAutoPublishMetric } = await import("@/lib/admin/auto-publish-metrics");
+      await recordAutoPublishMetric("duplicate_rejected", "question");
+    }
     return {
       success: false,
       error: result.error,
-      summary: result.duplicate ? "Duplicate stem skipped" : `Failed to save question: ${result.error}`,
+      summary: result.duplicate ? "Duplicate question skipped (similar stem or content)" : `Failed to save question: ${result.error}`,
       duplicate: result.duplicate,
     };
   }
   if (result.contentId) {
-    const { getSourceFrameworkForTrack } = await import("@/lib/admin/autonomous-operations");
     const framework = await getSourceFrameworkForTrack(config.trackSlug);
     if (framework?.id && isSupabaseServiceRoleConfigured()) {
-      const supabase = (await import("@/lib/supabase/service")).createServiceClient();
+      const supabase = createServiceClient();
       await supabase.from("content_source_framework").upsert(
         { entity_type: "question", entity_id: result.contentId, source_framework_id: framework.id },
         { onConflict: "entity_type,entity_id" }
       );
     }
-    const { ensureContentEvidenceMetadata } = await import("@/lib/admin/source-governance");
     const ext = draft as { primaryReference?: string; guidelineReference?: string; evidenceTier?: 1 | 2 | 3 };
-    await ensureContentEvidenceMetadata("question", result.contentId, config.trackSlug, {
+    const evidenceResult = await ensureContentEvidenceMetadata("question", result.contentId, config.trackSlug, {
       aiPrimarySlug: ext.primaryReference ?? null,
       aiGuidelineSlug: ext.guidelineReference ?? null,
       aiEvidenceTier: ext.evidenceTier ?? null,
       sourceFrameworkId: framework?.id ?? null,
     });
-    const { computeQuestionQualityScore } = await import("@/lib/ai/content-quality-scoring");
-    const { upsertContentQualityMetadata, runAutoPublishFlow } = await import("@/lib/admin/auto-publish");
+    await ensureSourceEvidenceForAIGeneratedContent("question", result.contentId);
     const quality = computeQuestionQualityScore(draft);
+    const medicalValidation = await validateQuestionMedically({
+      stem: draft.stem,
+      options: Array.isArray(draft.options)
+        ? draft.options.map((o) => ({
+            key: (o as { key?: string }).key ?? "A",
+            text: (o as { text?: string }).text ?? "",
+            isCorrect: (o as { isCorrect?: boolean }).isCorrect ?? false,
+            distractorRationale: (o as { distractorRationale?: string }).distractorRationale,
+          }))
+        : [],
+      rationale: (draft as { rationale?: string }).rationale ?? "",
+      primaryReference: (draft as { primaryReference?: string }).primaryReference,
+      guidelineReference: (draft as { guidelineReference?: string }).guidelineReference,
+      system: (draft as { system?: string }).system,
+      topic: (draft as { topic?: string }).topic,
+    });
+    const reviewFlags = computeReviewFlags({
+      validationErrors: quality.validationErrors,
+      validationStatus: quality.validationStatus,
+      hasRationale: Boolean((draft as { rationale?: string }).rationale?.trim()),
+      evidenceMappingOk: evidenceResult.ok,
+      aiValidationPassed: medicalValidation.passed,
+      aiValidationConfidence: medicalValidation.confidence,
+      boardStyleMismatch: quality.validationErrors?.some((e) => /board|style|stem.*length/i.test(String(e))),
+    });
+    const noFlags = !reviewFlags.requires_editorial_review && !reviewFlags.requires_sme_review && !reviewFlags.requires_legal_review && !reviewFlags.requires_qa_review;
+    const generationMetadata: Record<string, unknown> = {
+      source: "ai_content_factory",
+      trackId: config.trackId,
+      dedupe_passed: true,
+      ai_validation_passed: medicalValidation.passed,
+      requires_human_review: medicalValidation.requiresHumanReview,
+      ai_validation_confidence: medicalValidation.confidence,
+      ai_validation_errors: medicalValidation.errors,
+      ai_validation_warnings: medicalValidation.warnings,
+      requires_editorial_review: reviewFlags.requires_editorial_review,
+      requires_sme_review: reviewFlags.requires_sme_review,
+      requires_legal_review: reviewFlags.requires_legal_review,
+      requires_qa_review: reviewFlags.requires_qa_review,
+    };
     await upsertContentQualityMetadata("question", result.contentId, {
       qualityScore: quality.qualityScore,
-      autoPublishEligible: quality.autoPublishEligible,
+      autoPublishEligible: noFlags && quality.autoPublishEligible && medicalValidation.passed && !medicalValidation.requiresHumanReview,
       validationStatus: quality.validationStatus,
       validationErrors: quality.validationErrors,
-      generationMetadata: { source: "ai_content_factory", trackId: config.trackId },
+      generationMetadata,
     });
     const apResult = await runAutoPublishFlow(
       "question",
       result.contentId,
       "question",
       config.saveStatus ?? "draft",
-      createdBy
+      createdBy,
+      { reviewFlags }
     );
     const optionCount = Array.isArray(draft.options) ? draft.options.length : 0;
     const summary = apResult.published
@@ -145,16 +209,14 @@ export async function saveAIStudyGuide(
     };
   }
   if (result.contentId) {
-    const { getSourceFrameworkForTrack } = await import("@/lib/admin/autonomous-operations");
     const framework = await getSourceFrameworkForTrack(config.trackSlug);
     if (framework?.id && isSupabaseServiceRoleConfigured()) {
-      const supabase = (await import("@/lib/supabase/service")).createServiceClient();
+      const supabase = createServiceClient();
       await supabase.from("content_source_framework").upsert(
         { entity_type: "study_guide", entity_id: result.contentId, source_framework_id: framework.id },
         { onConflict: "entity_type,entity_id" }
       );
     }
-    const { ensureContentEvidenceMetadata } = await import("@/lib/admin/source-governance");
     const ext = draft as { primaryReference?: string; guidelineReference?: string; evidenceTier?: number };
     await ensureContentEvidenceMetadata("study_guide", result.contentId, config.trackSlug, {
       aiPrimarySlug: ext.primaryReference ?? null,
@@ -162,8 +224,7 @@ export async function saveAIStudyGuide(
       aiEvidenceTier: ext.evidenceTier ?? null,
       sourceFrameworkId: framework?.id ?? null,
     });
-    const { computeStudyGuideQualityScore } = await import("@/lib/ai/content-quality-scoring");
-    const { upsertContentQualityMetadata, runAutoPublishFlow } = await import("@/lib/admin/auto-publish");
+    await ensureSourceEvidenceForAIGeneratedContent("study_guide", result.contentId);
     const quality = computeStudyGuideQualityScore(draft, "full");
     await upsertContentQualityMetadata("study_guide", result.contentId, {
       qualityScore: quality.qualityScore,
@@ -223,6 +284,8 @@ export async function saveAIStudyGuideSectionPack(
         shardId: options.shardId,
       });
     }
+    const { recordAutoPublishMetric } = await import("@/lib/admin/auto-publish-metrics");
+    await recordAutoPublishMetric("duplicate_rejected", "study_guide");
     return { success: false, error: "Duplicate study guide title", duplicate: true };
   }
 
@@ -245,21 +308,18 @@ export async function saveAIStudyGuideSectionPack(
       normalizedTextPreview: prep.normalizedTextPreview,
       createdByBatchPlanId: options?.batchPlanId ?? null,
     });
-    const { getSourceFrameworkForTrack } = await import("@/lib/admin/autonomous-operations");
     const framework = await getSourceFrameworkForTrack(config.trackSlug);
     if (framework?.id && isSupabaseServiceRoleConfigured()) {
-      const supabase = (await import("@/lib/supabase/service")).createServiceClient();
+      const supabase = createServiceClient();
       await supabase.from("content_source_framework").upsert(
         { entity_type: "study_guide", entity_id: result.contentId, source_framework_id: framework.id },
         { onConflict: "entity_type,entity_id" }
       );
     }
-    const { ensureContentEvidenceMetadata } = await import("@/lib/admin/source-governance");
     await ensureContentEvidenceMetadata("study_guide", result.contentId, config.trackSlug, {
       sourceFrameworkId: framework?.id ?? null,
     });
-    const { computeStudyGuideQualityScore } = await import("@/lib/ai/content-quality-scoring");
-    const { upsertContentQualityMetadata, runAutoPublishFlow } = await import("@/lib/admin/auto-publish");
+    await ensureSourceEvidenceForAIGeneratedContent("study_guide", result.contentId);
     const quality = computeStudyGuideQualityScore(
       { title: guideTitle, description: "", sections: draft.sections },
       "section_pack"
@@ -321,6 +381,8 @@ export async function saveAIFlashcardDeck(
         shardId: options.shardId,
       });
     }
+    const { recordAutoPublishMetric } = await import("@/lib/admin/auto-publish-metrics");
+    await recordAutoPublishMetric("duplicate_rejected", "flashcard_deck");
     return { success: false, error: "Duplicate flashcard deck name", duplicate: true };
   }
 
@@ -343,21 +405,18 @@ export async function saveAIFlashcardDeck(
       normalizedTextPreview: prep.normalizedTextPreview,
       createdByBatchPlanId: options?.batchPlanId ?? null,
     });
-    const { getSourceFrameworkForTrack } = await import("@/lib/admin/autonomous-operations");
     const framework = await getSourceFrameworkForTrack(config.trackSlug);
     if (framework?.id && isSupabaseServiceRoleConfigured()) {
-      const supabase = (await import("@/lib/supabase/service")).createServiceClient();
+      const supabase = createServiceClient();
       await supabase.from("content_source_framework").upsert(
         { entity_type: "flashcard_deck", entity_id: result.contentId, source_framework_id: framework.id },
         { onConflict: "entity_type,entity_id" }
       );
     }
-    const { ensureContentEvidenceMetadata } = await import("@/lib/admin/source-governance");
     await ensureContentEvidenceMetadata("flashcard_deck", result.contentId, config.trackSlug, {
       sourceFrameworkId: framework?.id ?? null,
     });
-    const { computeFlashcardDeckQualityScore } = await import("@/lib/ai/content-quality-scoring");
-    const { upsertContentQualityMetadata, runAutoPublishFlow } = await import("@/lib/admin/auto-publish");
+    await ensureSourceEvidenceForAIGeneratedContent("flashcard_deck", result.contentId);
     const quality = computeFlashcardDeckQualityScore(draft);
     await upsertContentQualityMetadata("flashcard_deck", result.contentId, {
       qualityScore: quality.qualityScore,
@@ -419,6 +478,8 @@ export async function saveAIHighYieldContent(
         shardId: options.shardId,
       });
     }
+    const { recordAutoPublishMetric } = await import("@/lib/admin/auto-publish-metrics");
+    await recordAutoPublishMetric("duplicate_rejected", "high_yield_content");
     return { success: false, error: "Duplicate high-yield title", duplicate: true };
   }
 
@@ -442,16 +503,14 @@ export async function saveAIHighYieldContent(
       normalizedTextPreview: prep.normalizedTextPreview,
       createdByBatchPlanId: options?.batchPlanId ?? null,
     });
-    const { getSourceFrameworkForTrack } = await import("@/lib/admin/autonomous-operations");
     const framework = await getSourceFrameworkForTrack(config.trackSlug);
     if (framework?.id && isSupabaseServiceRoleConfigured()) {
-      const supabase = (await import("@/lib/supabase/service")).createServiceClient();
+      const supabase = createServiceClient();
       await supabase.from("content_source_framework").upsert(
         { entity_type: "high_yield_content", entity_id: result.contentId, source_framework_id: framework.id },
         { onConflict: "entity_type,entity_id" }
       );
     }
-    const { ensureContentEvidenceMetadata } = await import("@/lib/admin/source-governance");
     const hyExt = draft as { primaryReference?: string; guidelineReference?: string; evidenceTier?: number };
     await ensureContentEvidenceMetadata("high_yield_content", result.contentId, config.trackSlug, {
       aiPrimarySlug: hyExt.primaryReference ?? null,
@@ -459,8 +518,7 @@ export async function saveAIHighYieldContent(
       aiEvidenceTier: hyExt.evidenceTier ?? null,
       sourceFrameworkId: framework?.id ?? null,
     });
-    const { computeHighYieldQualityScore } = await import("@/lib/ai/content-quality-scoring");
-    const { upsertContentQualityMetadata, runAutoPublishFlow } = await import("@/lib/admin/auto-publish");
+    await ensureSourceEvidenceForAIGeneratedContent("high_yield_content", result.contentId);
     const quality = computeHighYieldQualityScore(draft as unknown as Record<string, unknown>, contentType);
     await upsertContentQualityMetadata("high_yield_content", result.contentId, {
       qualityScore: quality.qualityScore,
@@ -515,7 +573,6 @@ export async function saveAIQuestionsBulk(
   contentIds: string[];
   error?: string;
 }> {
-  const { bulkPersistQuestions } = await import("@/lib/ai/factory/bulk-persistence");
   const opts =
     typeof batchJobIdOrOpts === "string"
       ? { batchJobId: batchJobIdOrOpts }

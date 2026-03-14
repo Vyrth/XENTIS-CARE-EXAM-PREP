@@ -5,7 +5,8 @@
 
 import type { TrackSlug } from "@/data/mock/types";
 import type { ExamMode } from "@/types/exam";
-import { PRE_PRACTICE_CONFIG, SYSTEM_EXAM_MIN_QUESTIONS, READINESS_CONFIG } from "@/types/exam";
+import { PRE_PRACTICE_CONFIG, READINESS_CONFIG } from "@/types/exam";
+import { SYSTEM_EXAM_PRACTICE_IDEAL_QUESTIONS } from "@/config/exam";
 import type { Question } from "@/data/mock/types";
 
 /** Stable shuffle using seed - same seed = same order */
@@ -66,7 +67,7 @@ export async function fetchQuestionIdsForExam(options: QuestionBankOptions): Pro
         : options.mode === "readiness"
           ? READINESS_CONFIG.questionCount
           : options.mode === "system"
-            ? Math.max(SYSTEM_EXAM_MIN_QUESTIONS, 50)
+            ? SYSTEM_EXAM_PRACTICE_IDEAL_QUESTIONS
             : 20);
     params.set("limit", String(limit));
 

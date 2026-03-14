@@ -13,6 +13,13 @@ import { getSafeRedirectPath } from "@/lib/auth/url";
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+
+  // Allow cron and API routes to bypass auth-redirect middleware.
+  // API routes should return their own 401/403/405 responses instead of redirecting to login.
+  if (pathname.startsWith("/api/")) {
+    return NextResponse.next();
+  }
+
   if (isBadAdminPath(pathname)) {
     return NextResponse.redirect(new URL(getAdminRedirectTarget(), request.url));
   }

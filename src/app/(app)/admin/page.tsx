@@ -149,6 +149,47 @@ export default async function AdminOverviewPage() {
         </Card>
       </div>
 
+      {/* High-confidence auto-publish diagnostics (7d) */}
+      {(metrics.autoPublishMetrics.auto_published_count > 0 ||
+        metrics.autoPublishMetrics.routed_to_review_count > 0 ||
+        metrics.autoPublishMetrics.duplicate_rejected_count > 0 ||
+        metrics.autoPublishMetrics.legal_exception_count > 0) && (
+        <Card className="border-slate-200 dark:border-slate-700">
+          <div className="p-4">
+            <h2 className="font-semibold text-slate-900 dark:text-white flex items-center gap-2 mb-3">
+              {Icons.send}
+              Auto-publish diagnostics (7d)
+            </h2>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
+              <div>
+                <p className="text-slate-500">Auto-published</p>
+                <p className="font-semibold text-emerald-600 dark:text-emerald-400 tabular-nums">
+                  {metrics.autoPublishMetrics.auto_published_count}
+                </p>
+              </div>
+              <div>
+                <p className="text-slate-500">Routed to review</p>
+                <p className="font-semibold text-amber-600 dark:text-amber-400 tabular-nums">
+                  {metrics.autoPublishMetrics.routed_to_review_count}
+                </p>
+              </div>
+              <div>
+                <p className="text-slate-500">Duplicate rejected</p>
+                <p className="font-semibold text-slate-600 dark:text-slate-400 tabular-nums">
+                  {metrics.autoPublishMetrics.duplicate_rejected_count}
+                </p>
+              </div>
+              <div>
+                <p className="text-slate-500">Legal exception</p>
+                <p className="font-semibold text-rose-600 dark:text-rose-400 tabular-nums">
+                  {metrics.autoPublishMetrics.legal_exception_count}
+                </p>
+              </div>
+            </div>
+          </div>
+        </Card>
+      )}
+
       {/* Workflow metrics */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <Card padding="sm">

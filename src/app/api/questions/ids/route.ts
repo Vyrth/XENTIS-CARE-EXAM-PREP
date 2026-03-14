@@ -8,7 +8,8 @@ import { NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth/session";
 import { getPrimaryTrack } from "@/lib/auth/track";
 import { canAnswerQuestions } from "@/lib/billing/entitlements";
-import { PRE_PRACTICE_CONFIG, SYSTEM_EXAM_MIN_QUESTIONS, READINESS_CONFIG } from "@/types/exam";
+import { PRE_PRACTICE_CONFIG, READINESS_CONFIG } from "@/types/exam";
+import { SYSTEM_EXAM_PRACTICE_IDEAL_QUESTIONS } from "@/config/exam";
 
 export async function GET(req: Request) {
   const user = await getSessionUser();
@@ -43,7 +44,7 @@ export async function GET(req: Request) {
         break;
       case "system":
       case "custom_quiz":
-        limit = Math.max(SYSTEM_EXAM_MIN_QUESTIONS, 50);
+        limit = SYSTEM_EXAM_PRACTICE_IDEAL_QUESTIONS;
         break;
       default:
         limit = 20;

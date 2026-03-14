@@ -103,3 +103,36 @@ export function hashHighYieldTitle(title: string): { normalized: string; hash: s
     secondaryHash: createSecondaryHash(title),
   };
 }
+
+/** Normalize question payload for hash: stem + leadIn + options text + rationale */
+function normalizeQuestionPayloadForHash(payload: {
+  stem?: string;
+  leadIn?: string;
+  options?: { key?: string; text?: string }[];
+  rationale?: string;
+}): string {
+  const parts: string[] = [];
+  if (payload.stem?.trim()) parts.push(baseNormalize(payload.stem));
+  if (payload.leadIn?.trim()) parts.push(baseNormalize(payload.leadIn));
+  if (Array.isArray(payload.options)) {
+    for (const o of payload.options) {
+      if (o?.text?.trim()) parts.push(baseNormalize(o.text));
+    }
+  }
+  if (payload.rationale?.trim()) parts.push(baseNormalize(payload.rationale));
+  return parts.join(" ");
+}
+
+/** Create normalized content hash from full question payload (stem + options + rationale). */
+export function hashQuestionPayload(payload: {
+  stem?: string;
+  leadIn?: string;
+  options?: { key?: string; text?: string }[];
+  rationale?: string;
+}): { normalized: string; hash: string } {
+  const normalized = normalizeQuestionPayloadForHash(payload);
+  return {
+    normalized,
+    hash: createNormalizedHash(normalized),
+  };
+}

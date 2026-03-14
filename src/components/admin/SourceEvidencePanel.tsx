@@ -5,6 +5,7 @@ import { Card } from "@/components/ui/Card";
 import { SourceCopyrightForm } from "./SourceCopyrightForm";
 import { saveSourceEvidence, saveContentSourceLinks } from "@/app/(app)/actions/source-evidence";
 import type { SourceBasis, LegalStatus } from "@/lib/admin/source-evidence";
+import { AI_ORIGINAL_AUTHOR_NOTES } from "@/lib/admin/source-evidence";
 import type { ContentSource } from "@/types/admin";
 import { Icons } from "@/components/ui/icons";
 
@@ -38,6 +39,8 @@ export interface SourceEvidencePanelProps {
   onAddSource?: () => void;
   /** When true, show internal-only legal notes (admin only) */
   showLegalNotes?: boolean;
+  /** When true, fields are auto-filled for AI-generated content; manual entry not required */
+  isAIAutoFilled?: boolean;
 }
 
 export function SourceEvidencePanel({
@@ -52,6 +55,7 @@ export function SourceEvidencePanel({
   onSourceToggle: onSourceToggleProp,
   onAddSource,
   showLegalNotes = true,
+  isAIAutoFilled = false,
 }: SourceEvidencePanelProps) {
   const [sourceBasis, setSourceBasis] = useState<SourceBasis>(initialSourceBasis);
   const [selectedIds, setSelectedIds] = useState<string[]>(selectedSourceIds);
@@ -120,8 +124,15 @@ export function SourceEvidencePanel({
       </div>
 
       <p className="text-xs text-slate-500 mb-4">
-        Required for publish. Legal metadata is internal-only and never exposed to learners.
+        {isAIAutoFilled
+          ? "Auto-filled for AI-generated content. Manual entry not required for routine publish."
+          : "Required for publish. Legal metadata is internal-only and never exposed to learners."}
       </p>
+      {isAIAutoFilled && (
+        <div className="p-3 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 text-sm mb-4">
+          Legal status cleared for AI-generated original content from approved internal framework.
+        </div>
+      )}
 
       {error && (
         <div className="p-3 rounded-lg bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 text-sm mb-4">

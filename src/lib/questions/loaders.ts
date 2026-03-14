@@ -4,8 +4,20 @@
  */
 
 import { createClient } from "@/lib/supabase/server";
-import { LEARNER_VISIBLE_STATUSES } from "@/config/content";
+import { LEARNER_VISIBLE_STATUSES, QUESTIONS_TRACK_COLUMN } from "@/config/content";
 import type { TrackSlug } from "@/data/mock/types";
+
+const DEV_LOG =
+  process.env.NODE_ENV === "development" || process.env.DEBUG_LEARNER_CONTENT === "1";
+
+function logQueryError(context: string, error: { message?: string; code?: string }) {
+  if (DEV_LOG && error) {
+    console.warn(`[questions:${context}] query error`, {
+      message: error.message,
+      code: (error as { code?: string }).code,
+    });
+  }
+}
 
 export interface QuestionBankFilters {
   systemId?: string;
@@ -51,23 +63,28 @@ export async function loadQuestionCounts(
   trackId: string | null
 ): Promise<QuestionCounts> {
   if (!trackId) {
+    if (process.env.NODE_ENV === "development" || process.env.DEBUG_LEARNER_CONTENT === "1") {
+      console.info("[questions:loadQuestionCounts] blocking: no primary track (trackId null)");
+    }
     return { total: 0, bySystem: [], byDomain: [], byTopic: [] };
   }
 
   const supabase = await createClient();
 
-  const { count: totalCount } = await supabase
+  const { count: totalCount, error: countErr } = await supabase
     .from("questions")
     .select("id", { count: "exact", head: true })
-    .eq("exam_track_id", trackId)
+    .eq(QUESTIONS_TRACK_COLUMN, trackId)
     .in("status", [...LEARNER_VISIBLE_STATUSES]);
+  if (countErr) logQueryError("loadQuestionCounts:total", countErr);
 
-  const { data: bySystemRows } = await supabase
+  const { data: bySystemRows, error: bySystemErr } = await supabase
     .from("questions")
     .select("system_id, systems(id, slug, name)")
-    .eq("exam_track_id", trackId)
+    .eq(QUESTIONS_TRACK_COLUMN, trackId)
     .in("status", [...LEARNER_VISIBLE_STATUSES])
     .not("system_id", "is", null);
+  if (bySystemErr) logQueryError("loadQuestionCounts:bySystem", bySystemErr);
 
   const systemCounts = new Map<string, { slug: string; name: string; count: number }>();
   for (const r of bySystemRows ?? []) {
@@ -80,12 +97,13 @@ export async function loadQuestionCounts(
     }
   }
 
-  const { data: byDomainRows } = await supabase
+  const { data: byDomainRows, error: byDomainErr } = await supabase
     .from("questions")
     .select("domain_id, domains(id, slug, name)")
-    .eq("exam_track_id", trackId)
+    .eq(QUESTIONS_TRACK_COLUMN, trackId)
     .in("status", [...LEARNER_VISIBLE_STATUSES])
     .not("domain_id", "is", null);
+  if (byDomainErr) logQueryError("loadQuestionCounts:byDomain", byDomainErr);
 
   const domainCounts = new Map<string, { slug: string; name: string; count: number }>();
   for (const r of byDomainRows ?? []) {
@@ -98,12 +116,13 @@ export async function loadQuestionCounts(
     }
   }
 
-  const { data: byTopicRows } = await supabase
+  const { data: byTopicRows, error: byTopicErr } = await supabase
     .from("questions")
     .select("topic_id, topics(id, slug, name)")
-    .eq("exam_track_id", trackId)
+    .eq(QUESTIONS_TRACK_COLUMN, trackId)
     .in("status", [...LEARNER_VISIBLE_STATUSES])
     .not("topic_id", "is", null);
+  if (byTopicErr) logQueryError("loadQuestionCounts:byTopic", byTopicErr);
 
   const topicCounts = new Map<string, { slug: string; name: string; count: number }>();
   for (const r of byTopicRows ?? []) {
@@ -138,8 +157,52 @@ export async function loadQuestionCounts(
     count: v.count,
   }));
 
+  const total = totalCount ?? 0;
+
+  if (process.env.NODE_ENV === "development" || process.env.DEBUG_LEARNER_CONTENT === "1") {
+    if (total > 0) {
+      console.info("[questions:loadQuestionCounts] ok", {
+        trackId,
+        total,
+        bySystem: bySystem.length,
+        byDomain: byDomain.length,
+        byTopic: byTopic.length,
+      });
+    }
+  }
+
+  if ((process.env.NODE_ENV === "development" || process.env.DEBUG_LEARNER_CONTENT === "1") && total === 0) {
+    try {
+      const { createServiceClient } = await import("@/lib/supabase/service");
+      const { isSupabaseServiceRoleConfigured } = await import("@/lib/supabase/env");
+      if (isSupabaseServiceRoleConfigured()) {
+        const svc = createServiceClient();
+        const { count: rawCount } = await svc
+          .from("questions")
+          .select("id", { count: "exact", head: true })
+          .eq(QUESTIONS_TRACK_COLUMN, trackId)
+          .in("status", [...LEARNER_VISIBLE_STATUSES]);
+        const raw = rawCount ?? 0;
+        console.info("[questions:loadQuestionCounts] debug", {
+          trackId,
+          learnerVisibleCount: total,
+          rawPublishedCount: raw,
+          blockingFilter: raw > 0 ? "RLS or join filters may be blocking learner visibility" : "No published/approved content for this track",
+        });
+      } else {
+        console.info("[questions:loadQuestionCounts] debug", {
+          trackId,
+          learnerVisibleCount: total,
+          blockingFilter: "No track or no published content",
+        });
+      }
+    } catch {
+      // best-effort
+    }
+  }
+
   return {
-    total: totalCount ?? 0,
+    total,
     bySystem,
     byDomain,
     byTopic,
@@ -208,7 +271,7 @@ export async function loadQuestionIds(
   let query = supabase
     .from("questions")
     .select("id")
-    .eq("exam_track_id", trackId)
+    .eq(QUESTIONS_TRACK_COLUMN, trackId)
     .in("status", [...LEARNER_VISIBLE_STATUSES]);
 
   if (filters.systemId) query = query.eq("system_id", filters.systemId);
@@ -216,7 +279,7 @@ export async function loadQuestionIds(
     const { data: sys } = await supabase
       .from("systems")
       .select("id")
-      .eq("exam_track_id", trackId)
+      .eq(QUESTIONS_TRACK_COLUMN, trackId)
       .eq("slug", filters.systemSlug)
       .single();
     if (sys) query = query.eq("system_id", sys.id);
@@ -237,7 +300,8 @@ export async function loadQuestionIds(
     if (qt) query = query.eq("question_type_id", qt.id);
   }
 
-  const { data } = await query;
+  const { data, error } = await query;
+  if (error) logQueryError("loadQuestionIds", error);
 
   if (!data || data.length === 0) return [];
 
@@ -262,6 +326,7 @@ function seededShuffle<T>(arr: T[], seed: number): T[] {
 
 /**
  * Load paginated question list for browse/filter view.
+ * Uses minimal select (no FK embeds) to avoid RLS/join issues on related tables.
  */
 export async function loadQuestionsPage(
   trackId: string | null,
@@ -269,17 +334,21 @@ export async function loadQuestionsPage(
   page: number
 ): Promise<{ questions: QuestionListItem[]; total: number; hasMore: boolean }> {
   if (!trackId) {
+    if (DEV_LOG) console.info("[questions:loadQuestionsPage] blocking: no trackId");
     return { questions: [], total: 0, hasMore: false };
   }
 
   const supabase = await createClient();
+
+  // Use minimal select (no FK embeds) to avoid RLS/join filtering on systems, domains, topics, subtopics.
+  // Slug/name can be resolved client-side or via separate lookup if needed.
+  const selectCols =
+    "id, stem, system_id, domain_id, topic_id, subtopic_id, question_type_id";
+
   let query = supabase
     .from("questions")
-    .select(
-      "id, stem, system_id, domain_id, topic_id, subtopic_id, question_type_id, question_types(slug), systems(slug, name), domains(slug, name), topics(slug, name), subtopics(slug, name)",
-      { count: "exact" }
-    )
-    .eq("exam_track_id", trackId)
+    .select(selectCols, { count: "exact" })
+    .eq(QUESTIONS_TRACK_COLUMN, trackId)
     .in("status", [...LEARNER_VISIBLE_STATUSES])
     .order("created_at", { ascending: false })
     .range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1);
@@ -289,7 +358,7 @@ export async function loadQuestionsPage(
     const { data: sys } = await supabase
       .from("systems")
       .select("id")
-      .eq("exam_track_id", trackId)
+      .eq(QUESTIONS_TRACK_COLUMN, trackId)
       .eq("slug", filters.systemSlug)
       .single();
     if (sys) query = query.eq("system_id", sys.id);
@@ -323,31 +392,61 @@ export async function loadQuestionsPage(
     else return { questions: [], total: 0, hasMore: false };
   }
 
-  const { data, count } = await query;
+  const { data, count, error } = await query;
+  if (error) {
+    logQueryError("loadQuestionsPage", error);
+    if (DEV_LOG) {
+      console.warn("[questions:loadQuestionsPage] query path", {
+        trackId,
+        filters,
+        selectCols,
+        page,
+        errorMessage: error.message,
+      });
+    }
+  }
 
-  const questions: QuestionListItem[] = (data ?? []).map((r: Record<string, unknown>) => {
-    const qt = Array.isArray(r.question_types) ? r.question_types[0] : r.question_types;
-    const sys = Array.isArray(r.systems) ? r.systems[0] : r.systems;
-    const dom = Array.isArray(r.domains) ? r.domains[0] : r.domains;
-    const top = Array.isArray(r.topics) ? r.topics[0] : r.topics;
-    const sub = Array.isArray(r.subtopics) ? r.subtopics[0] : r.subtopics;
-    return {
-      id: r.id as string,
-      stem: (r.stem as string)?.slice(0, 120) + ((r.stem as string)?.length > 120 ? "…" : ""),
-      type: (qt as { slug?: string })?.slug ?? "single_best_answer",
-      systemId: r.system_id as string | null,
-      systemSlug: (sys as { slug?: string })?.slug ?? null,
-      domainId: r.domain_id as string | null,
-      domainSlug: (dom as { slug?: string })?.slug ?? null,
-      topicId: r.topic_id as string | null,
-      topicSlug: (top as { slug?: string })?.slug ?? null,
-      subtopicId: r.subtopic_id as string | null,
-      difficultyTier: null,
-    };
-  });
+  const questions: QuestionListItem[] = (data ?? []).map((r: Record<string, unknown>) => ({
+    id: r.id as string,
+    stem: (r.stem as string)?.slice(0, 120) + ((r.stem as string)?.length > 120 ? "…" : ""),
+    type: "single_best_answer",
+    systemId: r.system_id as string | null,
+    systemSlug: null,
+    domainId: r.domain_id as string | null,
+    domainSlug: null,
+    topicId: r.topic_id as string | null,
+    topicSlug: null,
+    subtopicId: r.subtopic_id as string | null,
+    difficultyTier: null,
+  }));
 
   const total = count ?? 0;
   const hasMore = page * PAGE_SIZE < total;
+
+  if ((process.env.NODE_ENV === "development" || process.env.DEBUG_LEARNER_CONTENT === "1") && total === 0 && page === 1) {
+    try {
+      const { createServiceClient } = await import("@/lib/supabase/service");
+      const { isSupabaseServiceRoleConfigured } = await import("@/lib/supabase/env");
+      if (isSupabaseServiceRoleConfigured() && trackId) {
+        const svc = createServiceClient();
+        const { count: rawCount } = await svc
+          .from("questions")
+          .select("id", { count: "exact", head: true })
+          .eq(QUESTIONS_TRACK_COLUMN, trackId)
+          .in("status", [...LEARNER_VISIBLE_STATUSES]);
+        const raw = rawCount ?? 0;
+        console.info("[questions:loadQuestionsPage] debug", {
+          trackId,
+          filters,
+          learnerVisibleCount: total,
+          rawPublishedCount: raw,
+          blockingFilter: raw > 0 ? "RLS or join filters" : "No published content for track",
+        });
+      }
+    } catch {
+      // best-effort
+    }
+  }
 
   return { questions, total, hasMore };
 }
@@ -432,12 +531,13 @@ export async function loadQuestionMetadataForScoring(
   if (!trackId || questionIds.length === 0) return {};
 
   const supabase = await createClient();
-  const { data: questions } = await supabase
+  const { data: questions, error: qErr } = await supabase
     .from("questions")
     .select("id, system_id, domain_id, question_type_id, question_types(slug)")
-    .eq("exam_track_id", trackId)
+    .eq(QUESTIONS_TRACK_COLUMN, trackId)
     .in("id", questionIds)
     .in("status", [...LEARNER_VISIBLE_STATUSES]);
+  if (qErr) logQueryError("loadQuestionMetadataForScoring:questions", qErr);
 
   const { data: options } = await supabase
     .from("question_options")
@@ -538,12 +638,13 @@ export async function loadQuestionTypes() {
 export async function loadSubtopicsForTrack(trackId: string | null) {
   if (!trackId) return [];
   const supabase = await createClient();
-  const { data: qWithSub } = await supabase
+  const { data: qWithSub, error: subErr } = await supabase
     .from("questions")
     .select("subtopic_id")
-    .eq("exam_track_id", trackId)
+    .eq(QUESTIONS_TRACK_COLUMN, trackId)
     .in("status", [...LEARNER_VISIBLE_STATUSES])
     .not("subtopic_id", "is", null);
+  if (subErr) logQueryError("loadSubtopicsForTrack", subErr);
   const subIds = [...new Set((qWithSub ?? []).map((q) => q.subtopic_id).filter(Boolean))];
   if (subIds.length === 0) return [];
   const { data: subs } = await supabase

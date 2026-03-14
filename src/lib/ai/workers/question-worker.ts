@@ -12,6 +12,11 @@
 import { getOpenAIClient, isOpenAIConfigured } from "@/lib/ai/openai-client";
 import { createServiceClient } from "@/lib/supabase/service";
 import { buildWorkerQuestionPrompt, buildWorkerBatchPrompt } from "@/lib/ai/prompts/question-prompts";
+import {
+  loadGenerationMemory,
+  buildScopeKey,
+  buildNegativeConstraints,
+} from "@/lib/ai/scenario-diversification";
 import { validateGeneratedQuestion } from "@/lib/ai/validators/question-validator";
 import {
   saveGeneratedQuestions,
@@ -124,6 +129,10 @@ async function generateOneQuestion(
   const client = getOpenAIClient();
   if (!client) return null;
 
+  const scopeKey = buildScopeKey(context.examTrackId, context.systemId, context.topicId);
+  const memory = await loadGenerationMemory(scopeKey);
+  const negativeConstraints = buildNegativeConstraints(memory);
+
   const { system, user } = buildWorkerQuestionPrompt(track, itemType, {
     examTrackId: context.examTrackId,
     systemId: context.systemId,
@@ -139,6 +148,7 @@ async function generateOneQuestion(
     topic: topicName,
     objective: context.objective ?? context.objectives?.[0],
     difficulty: context.difficulty,
+    negativeConstraints,
   });
 
   const res = await client.chat.completions.create({
@@ -170,11 +180,16 @@ async function generateBatch(
   const client = getOpenAIClient();
   if (!client) return [];
 
+  const scopeKey = buildScopeKey(context.examTrackId, context.systemId, context.topicId);
+  const memory = await loadGenerationMemory(scopeKey);
+  const negativeConstraints = buildNegativeConstraints(memory);
+
   const { system, user } = buildWorkerBatchPrompt(track, itemType, {
     ...context,
     systemName: systemName ?? undefined,
     topicName: topicName ?? undefined,
     difficulty: pickDifficulty(context.difficultyMix),
+    negativeConstraints,
   }, count);
 
   const res = await client.chat.completions.create({

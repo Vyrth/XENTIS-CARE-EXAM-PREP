@@ -16,6 +16,11 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { isSupabaseServiceRoleConfigured } from "@/lib/supabase/env";
 import { normalizeForHash, simpleHash } from "@/lib/ai/dedupe-utils";
 import type { ValidatedQuestion } from "@/lib/ai/validators/question-validator";
+import {
+  extractArchetypeFromStem,
+  buildScopeKey,
+  appendToGenerationMemory,
+} from "@/lib/ai/scenario-diversification";
 
 const MODEL_USED = "gpt-4o-mini";
 const PROMPT_VERSION = "question-worker-v1";
@@ -87,6 +92,7 @@ async function fetchExistingHashes(
  * Build stem_metadata for a validated question.
  */
 function buildStemMetadata(q: ValidatedQuestion): Record<string, unknown> {
+  const archetype = extractArchetypeFromStem(q.stem, q.rationale);
   const meta: Record<string, unknown> = {
     leadIn: q.leadIn,
     instructions: q.instructions,
@@ -97,6 +103,7 @@ function buildStemMetadata(q: ValidatedQuestion): Record<string, unknown> {
     teachingPoint: q.teachingPoint,
     boardRelevance: q.boardRelevance,
     mnemonic: q.mnemonic,
+    scenario_archetype: archetype,
   };
   return Object.fromEntries(Object.entries(meta).filter(([, v]) => v != null && v !== ""));
 }
@@ -193,6 +200,14 @@ export async function saveGeneratedQuestions(
         }
       }
       if (!optionsOk) continue;
+
+      const archetype = stemMeta.scenario_archetype;
+      if (archetype && typeof archetype === "object") {
+        appendToGenerationMemory(
+          buildScopeKey(inp.examTrackId, inp.systemId, inp.topicId),
+          archetype as Parameters<typeof appendToGenerationMemory>[1]
+        ).catch(() => {});
+      }
 
       if (inp.question.difficulty >= 1 && inp.question.difficulty <= 5) {
         await supabase.from("question_adaptive_profiles").upsert(

@@ -4,7 +4,7 @@ import { getSessionUser } from "@/lib/auth/session";
 import { getPrimaryTrack } from "@/lib/auth/track";
 import { loadQuestionCounts, loadSystemsForTrack } from "@/lib/questions";
 import { Icons } from "@/components/ui/icons";
-import { SYSTEM_EXAM_MIN_QUESTIONS } from "@/types/exam";
+import { SYSTEM_EXAM_PRACTICE_MIN_QUESTIONS, SYSTEM_EXAM_PRACTICE_IDEAL_QUESTIONS } from "@/config/exam";
 
 type Props = { params: Promise<{ slug: string }> };
 
@@ -34,7 +34,8 @@ export default async function QuestionsBySystemPage({ params }: Props) {
     );
   }
 
-  const canStart = systemCount >= SYSTEM_EXAM_MIN_QUESTIONS;
+  const canStart = systemCount >= SYSTEM_EXAM_PRACTICE_MIN_QUESTIONS;
+  const showShortSessionWarning = canStart && systemCount < SYSTEM_EXAM_PRACTICE_IDEAL_QUESTIONS;
   const seed = Date.now() % 100000;
   const examHref = `/exam/system-${system.id}-${seed}`;
 
@@ -53,9 +54,14 @@ export default async function QuestionsBySystemPage({ params }: Props) {
       </h1>
       <p className="text-slate-600 dark:text-slate-400">
         {systemCount} question{systemCount === 1 ? "" : "s"} available for {track.toUpperCase()}.
+        {canStart && showShortSessionWarning && (
+          <span className="block mt-2 text-amber-600 dark:text-amber-400">
+            You can still start a shorter practice session.
+          </span>
+        )}
         {!canStart && (
           <span className="block mt-2 text-amber-600 dark:text-amber-400">
-            Minimum {SYSTEM_EXAM_MIN_QUESTIONS} questions required to start a system exam.
+            Minimum {SYSTEM_EXAM_PRACTICE_MIN_QUESTIONS} questions required to start practice.
           </span>
         )}
       </p>

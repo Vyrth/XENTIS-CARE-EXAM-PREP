@@ -11,10 +11,9 @@ import { loadExamTracks } from "@/lib/admin/loaders";
 import { isSupabaseServiceRoleConfigured } from "@/lib/supabase/env";
 import { buildAIFactoryUrl } from "@/lib/admin/ai-factory-gap-links";
 import type { StatusBreakdown } from "@/lib/admin/track-inventory";
+import { SYSTEM_EXAM_PRACTICE_IDEAL_QUESTIONS } from "@/config/exam";
 
 const LOW_QUESTION_THRESHOLD = 20;
-const LOW_SYSTEM_EXAM_THRESHOLD = 50;
-const MIN_QUESTIONS_FOR_SYSTEM_EXAM = 50;
 
 function StatusPills({ s }: { s: StatusBreakdown }) {
   const parts: string[] = [];
@@ -246,7 +245,7 @@ export default async function ContentInventoryPage({
                   <InventoryRow
                     label="System Exams"
                     count={row.systemExams}
-                    isLow={row.systemExams > 0 && row.questionsApproved > 0 && row.questionsApproved < row.systems * MIN_QUESTIONS_FOR_SYSTEM_EXAM}
+                    isLow={row.systemExams > 0 && row.questionsApproved > 0 && row.questionsApproved < row.systems * SYSTEM_EXAM_PRACTICE_IDEAL_QUESTIONS}
                     isMissing={row.systemExams === 0 && row.systems > 0}
                   />
                   <InventoryRow
@@ -322,7 +321,7 @@ export default async function ContentInventoryPage({
                       )}
                       {miss.systemExamsBelowMin.length > 0 && (
                         <li>
-                          {miss.systemExamsBelowMin.length} system(s) below {MIN_QUESTIONS_FOR_SYSTEM_EXAM} questions
+                          {miss.systemExamsBelowMin.length} system(s) below {SYSTEM_EXAM_PRACTICE_IDEAL_QUESTIONS} questions
                         </li>
                       )}
                       {!miss.hasPrePracticeTemplate && (

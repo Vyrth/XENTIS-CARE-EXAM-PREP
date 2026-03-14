@@ -22,8 +22,17 @@ export interface ValidationResult {
   errors: string[];
 }
 
-export function validateQuestionPayload(payload: unknown): ValidationResult {
+export interface ValidateQuestionOptions {
+  /** When true, relax optional/quality gates to reduce dead-lettering. Keeps required-structure checks. */
+  lenient?: boolean;
+}
+
+export function validateQuestionPayload(
+  payload: unknown,
+  options?: ValidateQuestionOptions
+): ValidationResult {
   const errors: string[] = [];
+  const lenient = options?.lenient ?? false;
 
   if (!payload || typeof payload !== "object") {
     return { valid: false, errors: ["Payload must be an object"] };
@@ -37,10 +46,13 @@ export function validateQuestionPayload(payload: unknown): ValidationResult {
   } else if (p.stem.trim().length < 10) {
     errors.push("stem must be at least 10 characters");
   } else if (
+    !lenient &&
     (itemType === "single_best_answer" || itemType === "case_study") &&
     p.stem.trim().length < 120
   ) {
     errors.push("stem must be at least 120 characters for board-style clinical scenarios");
+  } else if (lenient && p.stem.trim().length < 50) {
+    errors.push("stem must be at least 50 characters");
   }
   if (!itemType) {
     errors.push("itemType is required");
@@ -93,12 +105,12 @@ export function validateQuestionPayload(payload: unknown): ValidationResult {
     errors.push("rationale is required");
   } else if (p.rationale.trim().length < 10) {
     errors.push("rationale must be at least 10 characters");
-  } else if (p.rationale.trim().length < 200) {
+  } else if (!lenient && p.rationale.trim().length < 200) {
     errors.push("rationale must be at least 200 characters (post-generation quality check)");
   }
 
-  // Distractor rationales required for all wrong options
-  if (Array.isArray(p.options) && itemType === "single_best_answer") {
+  // Distractor rationales required for all wrong options (lenient: optional)
+  if (!lenient && Array.isArray(p.options) && itemType === "single_best_answer") {
     const wrongOptions = (p.options as QuestionOptionPayload[]).filter((o) => !o.isCorrect);
     const missingDr = wrongOptions.filter((o) => !(o.distractorRationale && o.distractorRationale.trim().length > 0));
     if (missingDr.length > 0) {

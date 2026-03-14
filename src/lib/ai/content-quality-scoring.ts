@@ -28,10 +28,13 @@ export interface QualityResult {
 
 /** Compute quality score and eligibility for a saved question (from draft). */
 export function computeQuestionQualityScore(
-  draft: QuestionDraftOutput | ExtendedQuestionOutput
+  draft: QuestionDraftOutput | ExtendedQuestionOutput,
+  options?: { lenient?: boolean }
 ): QualityResult {
   const errors: string[] = [];
-  const check = checkQuestionQuality({
+  const lenient = options?.lenient ?? false;
+  const check = checkQuestionQuality(
+    {
     stem: draft.stem ?? "",
     rationale: (draft as { rationale?: string }).rationale ?? "",
     options: Array.isArray(draft.options)
@@ -43,7 +46,9 @@ export function computeQuestionQualityScore(
       : [],
     itemType: (draft as ExtendedQuestionOutput).itemType,
     difficulty: (draft as { difficulty?: number }).difficulty,
-  });
+  },
+    { lenient }
+  );
 
   if (!check.valid) {
     errors.push(...check.errors);

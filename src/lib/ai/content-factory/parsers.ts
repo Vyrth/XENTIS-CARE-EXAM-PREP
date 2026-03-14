@@ -238,7 +238,7 @@ export function parseFlashcardDeckOutput(raw: string): FlashcardDeckOutput | nul
   const cards = Array.isArray(parsed.cards)
     ? parsed.cards.map(normalizeFlashcard).filter((c): c is FlashcardOutput => c != null)
     : [];
-  if (cards.length === 0) return null;
+  if (cards.length < 3) return null;
 
   return {
     name: String(parsed.name ?? "Flashcard Deck").trim(),

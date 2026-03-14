@@ -57,6 +57,8 @@ export interface ContentFactoryRequest {
   flashcardStyle?: string;
   /** Source text for "generate from study guide" */
   sourceText?: string;
+  /** Diversification hints for regeneration when duplicate detected (patient profile, care setting, clinical angle, decision type) */
+  diversificationContext?: string;
 }
 
 // -----------------------------------------------------------------------------

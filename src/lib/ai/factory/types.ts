@@ -71,6 +71,15 @@ export interface PersistResult {
   auditId?: string;
   /** True when question was skipped due to duplicate stem in same track/topic scope */
   duplicate?: boolean;
+  /** Similarity metadata when duplicate detected (for auditing) */
+  duplicateMetadata?: {
+    normalized_stem_hash: string;
+    normalized_content_hash: string;
+    stem_similarity: number;
+    payload_similarity: number;
+    duplicate_reason?: string;
+    regeneration_attempt?: number;
+  };
 }
 
 /** AI generation audit entry */

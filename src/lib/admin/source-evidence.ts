@@ -70,6 +70,33 @@ export async function ensureSourceEvidenceForAdminContent(
   }
 }
 
+/** AI-generated original content from approved internal evidence maps. Auto-cleared legal; no manual review. */
+export const AI_ORIGINAL_AUTHOR_NOTES =
+  "AI-generated educational content derived from approved framework and internal source governance.";
+
+export async function ensureSourceEvidenceForAIGeneratedContent(
+  contentType: string,
+  contentId: string
+): Promise<void> {
+  try {
+    if (!isSupabaseServiceRoleConfigured()) return;
+    const supabase = createServiceClient();
+    await supabase.from("content_source_evidence").upsert(
+      {
+        content_type: contentType,
+        content_id: contentId,
+        source_basis: "internal",
+        legal_status: "original",
+        author_notes: AI_ORIGINAL_AUTHOR_NOTES,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "content_type,content_id" }
+    );
+  } catch {
+    /* non-fatal */
+  }
+}
+
 /** Load source evidence for an entity */
 export async function loadSourceEvidence(
   contentType: string,
