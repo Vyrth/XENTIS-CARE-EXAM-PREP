@@ -38,23 +38,27 @@ echo "Running migration list..."
 supabase migration list
 
 echo "Generating schema diff smoke test..."
-TMP_DIFF="supabase/migrations/_tmp_schema_check.sql"
-rm -f "$TMP_DIFF"
+TMP_BASENAME="_tmp_schema_check"
+TMP_DIFF="supabase/migrations/"*"$TMP_BASENAME.sql"
 
-supabase db diff -f _tmp_schema_check >/dev/null 2>&1 || {
+rm -f supabase/migrations/*"$TMP_BASENAME.sql"
+
+supabase db diff -f "$TMP_BASENAME" >/dev/null 2>&1 || {
   echo "Error: supabase db diff failed"
-  rm -f "$TMP_DIFF"
+  rm -f supabase/migrations/*"$TMP_BASENAME.sql"
   exit 1
 }
 
-if [ -f "$TMP_DIFF" ]; then
-  if [ -s "$TMP_DIFF" ]; then
+GENERATED_FILE=$(ls supabase/migrations/*"$TMP_BASENAME.sql" 2>/dev/null | head -n 1 || true)
+
+if [ -n "${GENERATED_FILE:-}" ] && [ -f "$GENERATED_FILE" ]; then
+  if [ -s "$GENERATED_FILE" ]; then
     echo "Warning: Uncommitted schema drift detected."
-    echo "Review: $TMP_DIFF"
+    echo "Review: $GENERATED_FILE"
   else
     echo "No schema drift detected."
-    rm -f "$TMP_DIFF"
   fi
+  rm -f "$GENERATED_FILE"
 fi
 
 echo "Migration safety check passed."
