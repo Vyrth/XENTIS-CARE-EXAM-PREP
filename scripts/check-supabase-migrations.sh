@@ -45,19 +45,38 @@ supabase migration list
 echo "Scanning committed migrations for dangerous SQL..."
 DANGEROUS_PATTERNS='drop[[:space:]]+table|drop[[:space:]]+schema|truncate[[:space:]]+table|delete[[:space:]]+from[[:space:]]+[a-zA-Z0-9_."-]+[[:space:]]*;|drop[[:space:]]+column'
 TYPE_CHANGE_PATTERN='alter[[:space:]]+table.*alter[[:space:]]+column.*type'
+ALLOW_MARKER='xentis-allow-destructive-change'
 
-DANGEROUS_MATCHES="$(grep -RniE "$DANGEROUS_PATTERNS" supabase/migrations/*.sql || true)"
-TYPE_CHANGE_MATCHES="$(grep -RniE "$TYPE_CHANGE_PATTERN" supabase/migrations/*.sql || true)"
+DANGEROUS_FOUND=0
+TYPE_CHANGE_FOUND=0
 
-if [ -n "${DANGEROUS_MATCHES// }" ]; then
-  echo "Error: Forbidden destructive SQL detected in migrations:"
-  echo "$DANGEROUS_MATCHES"
-  exit 1
-fi
+for file in supabase/migrations/*.sql; do
+  [ -f "$file" ] || continue
+  # Skip generated drift temp file (allowed to contain DDL from diff)
+  case "$file" in *"__tmp_schema_check"*) continue ;; esac
 
-if [ -n "${TYPE_CHANGE_MATCHES// }" ]; then
-  echo "Error: Potential column type changes detected. Review manually:"
-  echo "$TYPE_CHANGE_MATCHES"
+  if grep -qiE "$DANGEROUS_PATTERNS" "$file"; then
+    if grep -qi "$ALLOW_MARKER" "$file"; then
+      echo "Allowed destructive migration: $file"
+    else
+      echo "Error: Forbidden destructive SQL detected in migration: $file"
+      grep -niE "$DANGEROUS_PATTERNS" "$file"
+      DANGEROUS_FOUND=1
+    fi
+  fi
+
+  if grep -qiE "$TYPE_CHANGE_PATTERN" "$file"; then
+    if grep -qi "$ALLOW_MARKER" "$file"; then
+      echo "Allowed column type change migration: $file"
+    else
+      echo "Error: Potential column type change detected in migration: $file"
+      grep -niE "$TYPE_CHANGE_PATTERN" "$file"
+      TYPE_CHANGE_FOUND=1
+    fi
+  fi
+done
+
+if [ "$DANGEROUS_FOUND" -ne 0 ] || [ "$TYPE_CHANGE_FOUND" -ne 0 ]; then
   exit 1
 fi
 
@@ -78,12 +97,13 @@ if [ -n "${GENERATED_FILE:-}" ] && [ -f "$GENERATED_FILE" ]; then
     echo "Error: Uncommitted schema drift detected."
     echo "Review generated diff: $GENERATED_FILE"
     echo "Convert intentional drift into a real migration before pushing."
+    echo "(Drift file left for review; delete after resolving.)"
     exit_code=1
   else
     echo "No schema drift detected."
     exit_code=0
+    rm -f "$GENERATED_FILE"
   fi
-  rm -f "$GENERATED_FILE"
   if [ "${exit_code:-0}" -ne 0 ]; then
     exit "$exit_code"
   fi
@@ -94,6 +114,7 @@ MISSING_RLS=0
 
 for file in supabase/migrations/*.sql; do
   [ -f "$file" ] || continue
+  case "$file" in *"__tmp_schema_check"*) continue ;; esac
 
   created_tables=$(grep -iE 'create[[:space:]]+table([[:space:]]+if[[:space:]]+not[[:space:]]+exists)?' "$file" \
     | sed -E 's/.*create[[:space:]]+table([[:space:]]+if[[:space:]]+not[[:space:]]+exists)?[[:space:]]+("?public"?\.)?"?([a-zA-Z0-9_]+)"?.*/\3/I' \

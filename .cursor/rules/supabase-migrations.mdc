@@ -1,10 +1,18 @@
 ---
-description: Supabase migration workflow — explain, create, check, diff, no push until safe
+description: Supabase migration workflow — no blind schema changes, explicit migrations, check:db after every change
 globs: supabase/migrations/**/*.sql
 alwaysApply: false
 ---
 
 # Supabase migration workflow
+
+## Principles
+
+- **Never modify Supabase schema blindly.** Always have a clear, stated intent for every schema change.
+- **Always prefer explicit SQL migrations** in `supabase/migrations/`. Do not rely on ad-hoc SQL or UI changes without a corresponding migration file.
+- **After any schema change**, run `npm run check:db` and **show the results** before continuing. Do not proceed to push or further edits until the check passes and output is shown.
+
+## Steps
 
 Before **creating**, **editing**, or **applying** any Supabase migration, follow this order:
 
@@ -14,12 +22,12 @@ Before **creating**, **editing**, or **applying** any Supabase migration, follow
 2. **Create or update the migration**  
    Add or edit the migration file under `supabase/migrations/`. Use idempotent patterns (`IF NOT EXISTS`, `DROP POLICY IF EXISTS` + `CREATE POLICY`, etc.). Do not rename or remove already-applied migration files.
 
-3. **Run the migration safety check**  
+3. **Run the migration safety check and show results**  
    Run:
    ```bash
    npm run check:db
    ```
-   Resolve any failures (Supabase CLI missing, migrations dir invalid, non-SQL files, local stack not running, `supabase migration list` or `supabase db diff` errors) before proceeding.
+   Resolve any failures (Supabase CLI missing, migrations dir invalid, non-SQL files, local stack not running, `supabase migration list` or `supabase db diff` errors). **Show the command output** before continuing.
 
 4. **Show the migration diff**  
    After the check passes, show the relevant migration diff (e.g. `supabase db diff` output or the edited migration file diff) so the change is visible.
@@ -29,4 +37,5 @@ Before **creating**, **editing**, or **applying** any Supabase migration, follow
 
 ## Summary
 
-- Explain → Create/update migration → `npm run check:db` → Show diff → No push until check passes.
+- Never change schema blindly; use explicit migrations in `supabase/migrations/`.
+- Explain → Create/update migration → `npm run check:db` → **Show results** → Show diff → No push until check passes.
