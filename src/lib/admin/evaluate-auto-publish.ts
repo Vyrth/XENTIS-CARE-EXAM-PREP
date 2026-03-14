@@ -16,6 +16,7 @@
 
 import { createServiceClient } from "@/lib/supabase/service";
 import { isSupabaseServiceRoleConfigured } from "@/lib/supabase/env";
+import { AUTO_PUBLISH_CONFIDENCE_MIN, DUPLICATE_SIMILARITY_MAX } from "@/config/ai-factory";
 import { getAutoPublishConfig, ENTITY_TYPE_TO_TABLE } from "./auto-publish-config";
 import { getTrackSlug } from "./source-governance-helpers";
 import { hasValidSourceMapping } from "./source-governance";
@@ -24,6 +25,62 @@ import { loadSourceEvidence } from "./source-evidence";
 export type RoutingLane = "editorial" | "sme" | "legal" | "qa" | "needs_revision";
 
 const LEGAL_CLEARED = ["original", "adapted"] as const;
+
+/** Legal status values that allow auto-publish (canonical + legacy). */
+const LEGAL_CLEARED_QUESTION = ["cleared_original_content", "approved", "original", "adapted"] as const;
+
+/** Evidence mapping status values that allow auto-publish. */
+const EVIDENCE_PASSED = ["passed", "valid"] as const;
+
+/**
+ * Input shape for shouldAutoPublishQuestion. Built from content_quality_metadata,
+ * generation_metadata, source evidence, and review flags.
+ */
+export interface QuestionForAutoPublish {
+  schemaValid: boolean;
+  confidence_score: number | null;
+  similarity_score: number | null;
+  medical_validation_status: string | null;
+  evidence_mapping_status: string | null;
+  legal_status: string | null;
+  requires_editorial_review: boolean;
+  requires_sme_review: boolean;
+  requires_legal_review: boolean;
+  requires_qa_review: boolean;
+}
+
+/**
+ * Returns true only when the question meets all auto-publish gates.
+ * Use this as the single source of truth for question auto-publish eligibility.
+ */
+export function shouldAutoPublishQuestion(question: QuestionForAutoPublish): boolean {
+  if (!question.schemaValid) return false;
+
+  const conf = question.confidence_score;
+  const conf100 = conf != null ? (conf <= 1 ? conf * 100 : conf) : 0;
+  if (conf100 < AUTO_PUBLISH_CONFIDENCE_MIN) return false;
+
+  const sim = question.similarity_score;
+  if (sim != null && typeof sim === "number" && !Number.isNaN(sim) && sim >= DUPLICATE_SIMILARITY_MAX) return false;
+
+  if (question.medical_validation_status !== "passed") return false;
+
+  const ev = (question.evidence_mapping_status ?? "").toLowerCase();
+  if (!EVIDENCE_PASSED.some((p) => ev === p)) return false;
+
+  const legalNorm = (question.legal_status ?? "").toLowerCase().replace(/-/g, "_");
+  if (!LEGAL_CLEARED_QUESTION.some((l) => legalNorm === l)) return false;
+
+  if (
+    question.requires_editorial_review ||
+    question.requires_sme_review ||
+    question.requires_legal_review ||
+    question.requires_qa_review
+  )
+    return false;
+
+  return true;
+}
 
 export interface AutoPublishEvalResult {
   eligible: boolean;
@@ -168,17 +225,19 @@ export async function evaluateAutoPublishEligibility(
   }
 
   // 6. evidence_mapping_valid
+  let evidenceMappingValid = true;
   if (config.requireSourceMapping && row.exam_track_id) {
     const trackSlug = await getTrackSlug(row.exam_track_id);
     if (trackSlug) {
       const sourceCheck = await hasValidSourceMapping(entityType, entityId, trackSlug);
+      evidenceMappingValid = sourceCheck.valid;
       if (!sourceCheck.valid) {
         blockReasons.push(sourceCheck.reason ?? "Evidence/source mapping required");
       }
     }
   }
 
-  // 7. legal_status in (original, adapted) — required for auto-publish
+  // 7. legal_status — required for auto-publish
   const evidence = await loadSourceEvidence(entityType, entityId);
   const legalOk = evidence && LEGAL_CLEARED.includes(evidence.legalStatus as (typeof LEGAL_CLEARED)[number]);
   if (!evidence) {
@@ -189,7 +248,33 @@ export async function evaluateAutoPublishEligibility(
     else blockReasons.push("Legal status not cleared for publish");
   }
 
-  const eligible = blockReasons.length === 0;
+  let eligible: boolean;
+  if (contentType === "question") {
+    const stemSim = Number(genMeta.stem_similarity ?? 0);
+    const payloadSim = Number(genMeta.payload_similarity ?? 0);
+    const similarityScore = config.maxSimilarityScore != null ? Math.max(stemSim, payloadSim) : null;
+    const confidenceRaw = Number(genMeta.ai_validation_confidence ?? 0);
+    const question: QuestionForAutoPublish = {
+      schemaValid:
+        validationStatus !== "schema_invalid" &&
+        validationStatus !== "validation_failed" &&
+        (!Array.isArray(validationErrors) || validationErrors.length === 0) &&
+        !!meta.auto_publish_eligible,
+      confidence_score: confidenceRaw > 0 ? confidenceRaw : null,
+      similarity_score: similarityScore,
+      medical_validation_status: genMeta.ai_validation_passed === true ? "passed" : "failed",
+      evidence_mapping_status: evidenceMappingValid ? "valid" : "invalid",
+      legal_status: evidence?.legalStatus ?? null,
+      requires_editorial_review: !!genMeta.requires_editorial_review,
+      requires_sme_review: !!genMeta.requires_sme_review,
+      requires_legal_review: !!genMeta.requires_legal_review,
+      requires_qa_review: !!genMeta.requires_qa_review,
+    };
+    eligible = shouldAutoPublishQuestion(question) && blockReasons.length === 0;
+  } else {
+    eligible = blockReasons.length === 0;
+  }
+
   const routingLane = eligible ? undefined : deriveRoutingLane(blockReasons);
   const routingReason = blockReasons.length > 0 ? blockReasons.join("; ") : undefined;
 

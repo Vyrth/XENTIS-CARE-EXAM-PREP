@@ -1,6 +1,10 @@
 -- =============================================================================
 -- Migration: Shard Generation Memory for Scenario Diversification
 -- =============================================================================
+-- Schema only: creates shard_generation_memory table, index, and comment.
+-- No RLS; no video_lessons or other tables. Learner-visible RLS lives in
+-- 20250322000001_learner_visible_approved_published_rls.sql.
+--
 -- Stores recent scenario archetypes per scope so new generations avoid repetition.
 -- scope_key = trackId:systemId:topicId (or trackId:systemId:all for system-scoped)
 -- =============================================================================

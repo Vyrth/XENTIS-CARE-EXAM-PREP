@@ -13,7 +13,7 @@
 --   SELECT schemaname, tablename, policyname, permissive, roles, cmd, qual
 --   FROM pg_policies
 --   WHERE tablename IN ('questions', 'question_options', 'study_guides', 'study_material_sections', 'video_lessons')
---     AND policyname LIKE '%learner%' OR policyname LIKE '%approved%' OR policyname LIKE '%read%'
+--     AND (policyname LIKE '%learner%' OR policyname LIKE '%approved%' OR policyname LIKE '%read%')
 --   ORDER BY tablename, policyname;
 -- =============================================================================
 

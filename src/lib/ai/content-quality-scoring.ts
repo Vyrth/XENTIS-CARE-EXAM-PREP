@@ -22,6 +22,10 @@ const MIN_QUALITY_FOR_ELIGIBLE = 70;
 export interface QualityResult {
   qualityScore: number;
   autoPublishEligible: boolean;
+  /** Structure complete (4 options for SBA, 1 correct, rationale + distractor rationales present). Enables persistence without manual completion. */
+  schemaComplete: boolean;
+  /** Quality bar for auto-publish (score ≥ threshold, no blocking errors). Do not lower; distinct from schemaComplete. */
+  qualityStrong: boolean;
   validationStatus: string;
   validationErrors: string[];
 }
@@ -33,20 +37,20 @@ export function computeQuestionQualityScore(
 ): QualityResult {
   const errors: string[] = [];
   const lenient = options?.lenient ?? false;
+  const opts = Array.isArray(draft.options) ? draft.options : [];
   const check = checkQuestionQuality(
     {
-    stem: draft.stem ?? "",
-    rationale: (draft as { rationale?: string }).rationale ?? "",
-    options: Array.isArray(draft.options)
-      ? draft.options.map((o) => ({
-          key: (o as { key?: string }).key ?? "A",
-          text: (o as { text?: string }).text ?? "",
-          isCorrect: (o as { isCorrect?: boolean }).isCorrect ?? false,
-        }))
-      : [],
-    itemType: (draft as ExtendedQuestionOutput).itemType,
-    difficulty: (draft as { difficulty?: number }).difficulty,
-  },
+      stem: draft.stem ?? "",
+      rationale: (draft as { rationale?: string }).rationale ?? "",
+      options: opts.map((o) => ({
+        key: (o as { key?: string }).key ?? "A",
+        text: (o as { text?: string }).text ?? "",
+        isCorrect: (o as { isCorrect?: boolean }).isCorrect ?? false,
+        distractorRationale: (o as { distractorRationale?: string }).distractorRationale,
+      })),
+      itemType: (draft as ExtendedQuestionOutput).itemType,
+      difficulty: (draft as { difficulty?: number }).difficulty,
+    },
     { lenient }
   );
 
@@ -55,6 +59,8 @@ export function computeQuestionQualityScore(
     return {
       qualityScore: 0,
       autoPublishEligible: false,
+      schemaComplete: false,
+      qualityStrong: false,
       validationStatus: "schema_invalid",
       validationErrors: errors,
     };
@@ -65,23 +71,35 @@ export function computeQuestionQualityScore(
     errors.push(`Rationale too short (min ${MIN_RATIONALE_LENGTH} chars)`);
   }
 
-  const correctCount = (draft.options ?? []).filter((o) => (o as { isCorrect?: boolean }).isCorrect).length;
+  const correctCount = opts.filter((o) => (o as { isCorrect?: boolean }).isCorrect).length;
+  const itemType = (draft as ExtendedQuestionOutput).itemType ?? "single_best_answer";
   if (correctCount !== 1) {
     errors.push("Exactly one correct answer required");
   }
 
+  const sbaHasFourOptions = itemType !== "single_best_answer" || opts.length >= 4;
+  const schemaComplete =
+    check.valid &&
+    rationale.length >= MIN_RATIONALE_LENGTH &&
+    correctCount === 1 &&
+    sbaHasFourOptions;
+
   const boardRelevance = check.boardRelevance ?? 0.5;
   const qualityScore = Math.round(boardRelevance * 100);
 
-  const autoPublishEligible =
+  const qualityStrong =
     errors.length === 0 &&
     qualityScore >= MIN_QUALITY_FOR_ELIGIBLE &&
     rationale.length >= MIN_RATIONALE_LENGTH &&
     correctCount === 1;
 
+  const autoPublishEligible = qualityStrong;
+
   return {
     qualityScore,
     autoPublishEligible,
+    schemaComplete,
+    qualityStrong,
     validationStatus: errors.length > 0 ? "validation_failed" : "passed",
     validationErrors: errors,
   };
@@ -103,6 +121,8 @@ export function computeStudyGuideQualityScore(
   return {
     qualityScore,
     autoPublishEligible,
+    schemaComplete: check.valid,
+    qualityStrong: autoPublishEligible,
     validationStatus: check.valid ? "passed" : "validation_failed",
     validationErrors: check.errors,
   };
@@ -120,6 +140,8 @@ export function computeFlashcardDeckQualityScore(draft: {
   return {
     qualityScore,
     autoPublishEligible,
+    schemaComplete: check.valid,
+    qualityStrong: autoPublishEligible,
     validationStatus: check.valid ? "passed" : "validation_failed",
     validationErrors: check.errors,
   };
@@ -136,6 +158,8 @@ export function computeHighYieldQualityScore(
   return {
     qualityScore,
     autoPublishEligible,
+    schemaComplete: check.valid,
+    qualityStrong: autoPublishEligible,
     validationStatus: check.valid ? "passed" : "validation_failed",
     validationErrors: check.errors,
   };

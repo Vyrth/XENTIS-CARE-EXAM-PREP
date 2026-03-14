@@ -5,23 +5,15 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { transitionContentStatus } from "@/app/(app)/actions/content-review";
 import { getAllowedTransitions } from "@/lib/admin/workflow";
-import { STATUS_LABELS } from "@/types/admin";
 import type { WorkflowStatus } from "@/types/admin";
-
-const ACTION_LABELS: Partial<Record<WorkflowStatus, string>> = {
-  sme_review: "Approve → SME",
-  legal_review: "Approve → Legal",
-  qa_review: "Approve → QA",
-  approved: "Approve",
-  needs_revision: "Request revision",
-  draft: "Send to generator",
-};
 
 export interface ReviewQueueRowActionsProps {
   entityType: string;
   entityId: string;
   currentStatus: WorkflowStatus;
   editHref: string;
+  /** Routing reason for tooltip / context (exception-based triage) */
+  routingReason?: string | null;
 }
 
 export function ReviewQueueRowActions({
@@ -35,6 +27,12 @@ export function ReviewQueueRowActions({
   const [error, setError] = useState<string | null>(null);
 
   const allowed = getAllowedTransitions(currentStatus);
+  const canPublish = allowed.includes("published");
+  const sendToSme = allowed.includes("sme_review");
+  const sendToLegal = allowed.includes("legal_review");
+  const sendToQa = allowed.includes("qa_review");
+  const requestRevision = allowed.includes("needs_revision");
+  const regenerate = allowed.includes("draft");
 
   const handleTransition = async (to: WorkflowStatus) => {
     setError(null);
@@ -51,28 +49,55 @@ export function ReviewQueueRowActions({
     }
   };
 
-  const primaryNext = allowed.find(
-    (t) => t === "sme_review" || t === "legal_review" || t === "qa_review" || t === "approved"
-  );
-  const needsRevision = allowed.includes("needs_revision");
-  const sendToGenerator = allowed.includes("draft");
-
   return (
     <div className="flex flex-wrap items-center gap-2">
       {error && (
-        <span className="text-xs text-red-600 dark:text-red-400">{error}</span>
+        <span className="text-xs text-red-600 dark:text-red-400" title={error}>
+          {error.length > 40 ? `${error.slice(0, 40)}…` : error}
+        </span>
       )}
-      {primaryNext && (
+      {canPublish && (
         <button
           type="button"
-          onClick={() => handleTransition(primaryNext!)}
+          onClick={() => handleTransition("published")}
+          disabled={!!transitioning}
+          className="px-2.5 py-1 rounded-md bg-emerald-600 text-white text-xs font-medium hover:bg-emerald-700 disabled:opacity-50"
+          title="Approve and publish (one-click when content is complete)"
+        >
+          {transitioning === "published" ? "…" : "Approve and publish"}
+        </button>
+      )}
+      {sendToSme && (
+        <button
+          type="button"
+          onClick={() => handleTransition("sme_review")}
           disabled={!!transitioning}
           className="px-2.5 py-1 rounded-md bg-indigo-600 text-white text-xs font-medium hover:bg-indigo-700 disabled:opacity-50"
         >
-          {transitioning === primaryNext ? "…" : STATUS_LABELS[primaryNext]}
+          {transitioning === "sme_review" ? "…" : "Send to SME"}
         </button>
       )}
-      {needsRevision && (
+      {sendToLegal && (
+        <button
+          type="button"
+          onClick={() => handleTransition("legal_review")}
+          disabled={!!transitioning}
+          className="px-2.5 py-1 rounded-md bg-indigo-600 text-white text-xs font-medium hover:bg-indigo-700 disabled:opacity-50"
+        >
+          {transitioning === "legal_review" ? "…" : "Send to legal"}
+        </button>
+      )}
+      {sendToQa && (
+        <button
+          type="button"
+          onClick={() => handleTransition("qa_review")}
+          disabled={!!transitioning}
+          className="px-2.5 py-1 rounded-md bg-indigo-600 text-white text-xs font-medium hover:bg-indigo-700 disabled:opacity-50"
+        >
+          {transitioning === "qa_review" ? "…" : "Send to QA"}
+        </button>
+      )}
+      {requestRevision && (
         <button
           type="button"
           onClick={() => handleTransition("needs_revision")}
@@ -82,15 +107,15 @@ export function ReviewQueueRowActions({
           {transitioning === "needs_revision" ? "…" : "Request revision"}
         </button>
       )}
-      {sendToGenerator && (
+      {regenerate && (
         <button
           type="button"
           onClick={() => handleTransition("draft")}
           disabled={!!transitioning}
           className="px-2.5 py-1 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-medium hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-50"
-          title="Send back to generator for regeneration"
+          title="Send back for regeneration"
         >
-          {transitioning === "draft" ? "…" : "Send to generator"}
+          {transitioning === "draft" ? "…" : "Regenerate"}
         </button>
       )}
       <Link

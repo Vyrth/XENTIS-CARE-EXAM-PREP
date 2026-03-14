@@ -190,6 +190,122 @@ export default async function AdminOverviewPage() {
         </Card>
       )}
 
+      {/* Phase 1 AI Factory operational metrics */}
+      <Card className="border-slate-200 dark:border-slate-700">
+        <div className="p-4 border-b border-slate-200 dark:border-slate-700">
+          <h2 className="font-semibold text-slate-900 dark:text-white flex items-center gap-2">
+            {Icons.sparkles}
+            Phase 1 AI Factory operational metrics
+          </h2>
+          <p className="text-sm text-slate-500 mt-1">
+            Scaling, review workload by lane, duplicate visibility — last {metrics.aiFactoryOperationalMetrics.window_days} days
+          </p>
+        </div>
+        <div className="p-4 space-y-6">
+          <div>
+            <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">Throughput & scaling</p>
+            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-4 text-sm">
+              <div>
+                <p className="text-slate-500">Auto-published</p>
+                <p className="font-semibold text-emerald-600 dark:text-emerald-400 tabular-nums">
+                  {metrics.aiFactoryOperationalMetrics.auto_published_count}
+                </p>
+              </div>
+              <div>
+                <p className="text-slate-500">→ Editorial</p>
+                <p className="font-semibold text-slate-900 dark:text-white tabular-nums">
+                  {metrics.aiFactoryOperationalMetrics.routed_editorial_count}
+                </p>
+              </div>
+              <div>
+                <p className="text-slate-500">→ SME</p>
+                <p className="font-semibold text-slate-900 dark:text-white tabular-nums">
+                  {metrics.aiFactoryOperationalMetrics.routed_sme_count}
+                </p>
+              </div>
+              <div>
+                <p className="text-slate-500">→ Legal</p>
+                <p className="font-semibold text-slate-900 dark:text-white tabular-nums">
+                  {metrics.aiFactoryOperationalMetrics.routed_legal_count}
+                </p>
+              </div>
+              <div>
+                <p className="text-slate-500">→ QA</p>
+                <p className="font-semibold text-slate-900 dark:text-white tabular-nums">
+                  {metrics.aiFactoryOperationalMetrics.routed_qa_count}
+                </p>
+              </div>
+              <div>
+                <p className="text-slate-500">Needs revision</p>
+                <p className="font-semibold text-amber-600 dark:text-amber-400 tabular-nums">
+                  {metrics.aiFactoryOperationalMetrics.needs_revision_count}
+                </p>
+              </div>
+            </div>
+          </div>
+          <div>
+            <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">Duplicates & exceptions</p>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
+              <div>
+                <p className="text-slate-500">Duplicate rejected</p>
+                <p className="font-semibold text-slate-600 dark:text-slate-400 tabular-nums">
+                  {metrics.aiFactoryOperationalMetrics.duplicate_rejected_count}
+                </p>
+              </div>
+              <div>
+                <p className="text-slate-500">Legal exception</p>
+                <p className="font-semibold text-rose-600 dark:text-rose-400 tabular-nums">
+                  {metrics.aiFactoryOperationalMetrics.legal_exception_count}
+                </p>
+              </div>
+              <div>
+                <p className="text-slate-500">Avg confidence</p>
+                <p className="font-semibold text-slate-900 dark:text-white tabular-nums">
+                  {metrics.aiFactoryOperationalMetrics.average_confidence_score != null
+                    ? (metrics.aiFactoryOperationalMetrics.average_confidence_score * 100).toFixed(1) + "%"
+                    : "—"}
+                </p>
+              </div>
+              <div>
+                <p className="text-slate-500">Avg similarity</p>
+                <p className="font-semibold text-slate-900 dark:text-white tabular-nums">
+                  {metrics.aiFactoryOperationalMetrics.average_similarity_score != null
+                    ? (metrics.aiFactoryOperationalMetrics.average_similarity_score * 100).toFixed(1) + "%"
+                    : "—"}
+                </p>
+              </div>
+            </div>
+          </div>
+          {metrics.aiFactoryOperationalMetrics.top_repeated_archetypes.length > 0 && (
+            <div>
+              <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">Top repeated scenario archetypes</p>
+              <div className="overflow-x-auto rounded border border-slate-200 dark:border-slate-700">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
+                      <th className="text-left p-3 font-medium text-slate-600 dark:text-slate-400">Archetype key</th>
+                      <th className="text-right p-3 font-medium text-slate-600 dark:text-slate-400">Count</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {metrics.aiFactoryOperationalMetrics.top_repeated_archetypes.map((a) => (
+                      <tr key={a.archetype_key} className="border-b border-slate-100 dark:border-slate-800">
+                        <td className="p-3 font-mono text-slate-700 dark:text-slate-300 truncate max-w-md" title={a.archetype_key}>
+                          {a.archetype_key}
+                        </td>
+                        <td className="p-3 text-right tabular-nums text-slate-600 dark:text-slate-400">
+                          {a.count}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      </Card>
+
       {/* Workflow metrics */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <Card padding="sm">

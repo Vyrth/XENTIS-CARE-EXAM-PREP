@@ -115,6 +115,17 @@ export const DIVERSITY_DIMENSIONS = `DIVERSITY REQUIREMENTS — Each batch must 
 5. **Acuity level**: low, moderate, high, critical
 6. **Pharmacology vs non-pharmacology**: mix medication-focused and non-pharmacology (lifestyle, procedures, assessment) questions`;
 
+/** Phase 1 scenario diversification: explicit dimensions to vary per shard/batch. */
+export const PHASE1_DIVERSIFICATION_ENFORCEMENT = `PHASE 1 SCENARIO DIVERSIFICATION — Within this batch/shard, vary every question on:
+- **Age band**: Rotate pediatric, adolescent, young adult, middle-aged, older adult, geriatric. Do not repeat the same band for consecutive questions.
+- **Care setting**: Rotate clinic, ED, inpatient, telehealth, follow-up, home health, school, long-term care.
+- **Task type / management phase**: Mix assessment, diagnosis, management, complication, prevention, patient education.
+- **Acuity**: Vary low, moderate, high, critical.
+- **Case opening**: Do NOT start multiple questions with the same demographic + setting + complaint (e.g. "A 54-year-old female presents with..." repeated). Each question must have a distinct scenario opening.`;
+
+/** Negative: do not repeat case openings across questions in the batch. */
+export const NEGATIVE_CASE_OPENING_INSTRUCTIONS = `AVOID REPEATED CASE OPENINGS — Do not start two or more questions with the same or nearly identical opening (e.g. same age, sex, and "presents with X"). Vary the first sentence: different age band, different setting, or different chief complaint. If you have already used "A 54-year-old female presents with abdominal pain," the next question must use a different patient and/or complaint.`;
+
 /** Scenario diversification — prevent repetitive stems like "54-year-old female with abdominal pain" */
 const SCENARIO_DIVERSIFICATION_RULES = `SCENARIO DIVERSIFICATION (CRITICAL — vary every question):
 1. **Clinical presentation**: Vary chief complaint, onset, severity, associated symptoms. Avoid repeating "presents with X" patterns.
@@ -200,6 +211,10 @@ ${EVIDENCE_SOURCE_REQUIREMENTS}
 ${JADE_QUESTION_RULES}
 
 ${QUALITY_GUARDRAILS}
+
+${PHASE1_DIVERSIFICATION_ENFORCEMENT}
+
+${NEGATIVE_CASE_OPENING_INSTRUCTIONS}
 
 ${SCENARIO_DIVERSIFICATION_RULES}
 
@@ -508,8 +523,8 @@ export function buildWorkerQuestionPrompt(
   });
 
   const diversificationBlock = context.negativeConstraints
-    ? `${DIVERSITY_DIMENSIONS}\n\n${context.negativeConstraints}\n\n${SCENARIO_DIVERSIFICATION_RULES}`
-    : `${DIVERSITY_DIMENSIONS}\n\n${SCENARIO_DIVERSIFICATION_RULES}`;
+    ? `${DIVERSITY_DIMENSIONS}\n\n${PHASE1_DIVERSIFICATION_ENFORCEMENT}\n\n${NEGATIVE_CASE_OPENING_INSTRUCTIONS}\n\n${context.negativeConstraints}\n\n${SCENARIO_DIVERSIFICATION_RULES}`
+    : `${DIVERSITY_DIMENSIONS}\n\n${PHASE1_DIVERSIFICATION_ENFORCEMENT}\n\n${NEGATIVE_CASE_OPENING_INSTRUCTIONS}\n\n${SCENARIO_DIVERSIFICATION_RULES}`;
 
   const originalityBlock = `${ORIGINALITY_RULES}
 

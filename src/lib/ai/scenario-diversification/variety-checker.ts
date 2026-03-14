@@ -2,7 +2,7 @@
  * Scenario Diversification - Batch Variety Checker
  *
  * Validates that a batch has sufficient archetype variety.
- * Blocks batches with poor variety (e.g. all middle-aged female abdominal pain).
+ * Identifies later items that share the same archetype as an earlier item (mark for needs_revision).
  */
 
 import type { ScenarioArchetype } from "./archetypes";
@@ -90,4 +90,25 @@ export function checkBatchVariety(archetypes: ScenarioArchetype[]): VarietyCheck
       pharmacologyMix: true,
     },
   };
+}
+
+/**
+ * Return indices of items that share the same scenario archetype key as an earlier item in the batch.
+ * Use to mark later duplicates for needs_revision or regeneration.
+ */
+export function getDuplicateArchetypeIndicesInBatch(
+  archetypeKeys: (string | null | undefined)[]
+): Set<number> {
+  const seen = new Set<string>();
+  const duplicateIndices = new Set<number>();
+  for (let i = 0; i < archetypeKeys.length; i++) {
+    const key = (archetypeKeys[i] ?? "").trim();
+    if (!key) continue;
+    if (seen.has(key)) {
+      duplicateIndices.add(i);
+    } else {
+      seen.add(key);
+    }
+  }
+  return duplicateIndices;
 }

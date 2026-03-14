@@ -22,6 +22,7 @@ import { AIGenerationSourcePanel } from "@/components/admin/AIGenerationSourcePa
 import { AutoPublishStatusBadge } from "@/components/admin/AutoPublishStatusBadge";
 import { EvidenceSourceGovernancePanel } from "@/components/admin/EvidenceSourceGovernancePanel";
 import { ReviewFlagsBadge } from "@/components/admin/ReviewFlagsBadge";
+import { QuestionPublishPanel } from "@/components/admin/QuestionPublishPanel";
 
 export default async function QuestionEditorPage({
   params,
@@ -103,6 +104,11 @@ export default async function QuestionEditorPage({
       </div>
       {(aiGeneration || autoPublishStatus) && (
         <div className="flex flex-col gap-3">
+          {question.status !== "draft" && question.status !== "published" && aiGeneration && (
+            <p className="text-sm text-slate-600 dark:text-slate-400">
+              Review exception and decide. Source/legal are pre-filled for AI content; edit only if you need to correct.
+            </p>
+          )}
           <div className="flex flex-wrap items-center gap-3">
             {aiGeneration && (
               <div className="flex-1 min-w-0">
@@ -118,6 +124,10 @@ export default async function QuestionEditorPage({
           )}
         </div>
       )}
+      <QuestionPublishPanel
+        questionId={id}
+        isAIGenerated={!!aiGeneration}
+      />
       <EvidenceSourceGovernancePanel
         contentType="question"
         contentId={id}

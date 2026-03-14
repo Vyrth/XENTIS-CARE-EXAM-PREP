@@ -12,7 +12,10 @@
 import { createServiceClient } from "@/lib/supabase/service";
 import { isSupabaseServiceRoleConfigured } from "@/lib/supabase/env";
 import { transitionContentStatus } from "@/app/(app)/actions/content-review";
-import { evaluateAutoPublishEligibility } from "./evaluate-auto-publish";
+import { evaluateAutoPublishEligibility, shouldAutoPublishQuestion } from "./evaluate-auto-publish";
+
+export { shouldAutoPublishQuestion };
+export type { QuestionForAutoPublish } from "./evaluate-auto-publish";
 import { hasAnyReviewFlag, type ReviewFlags } from "./review-flags";
 import { getAutoPublishConfig, type AutoPublishConfig } from "./auto-publish-config";
 import { recordAutoPublishMetric } from "./auto-publish-metrics";
@@ -94,15 +97,122 @@ export async function tryAutoPublish(
   return { published: true };
 }
 
-/** Run auto-publish flow: evaluate eligibility, publish if eligible (with publish_reason), else route to editor_review with routing_lane and routing_reason. */
+/** Pre-resolved routing from centralized resolveQuestionRouting (batch/persistence flow). */
+export interface PreResolvedRouting {
+  shouldAutoPublish: boolean;
+  routedLane: string;
+  routingReason: string;
+}
+
+/** Run auto-publish flow: use preResolvedRouting when provided (centralized routing), else evaluate eligibility. */
 export async function runAutoPublishFlow(
   entityType: string,
   entityId: string,
   contentType: string,
   fromStatus: string,
   actorId?: string | null,
-  options?: { reviewFlags?: ReviewFlags }
-): Promise<{ published: boolean; routedToReview: boolean; reason?: string }> {
+  options?: { reviewFlags?: ReviewFlags; preResolvedRouting?: PreResolvedRouting }
+): Promise<{ published: boolean; routedToReview: boolean; reason?: string; routingLane?: string }> {
+  const pre = options?.preResolvedRouting;
+
+  if (pre) {
+    if (process.env.NODE_ENV === "development" || process.env.DEBUG_AUTO_PUBLISH === "1") {
+      console.info("[auto-publish] using preResolvedRouting", {
+        entityType,
+        entityId,
+        shouldAutoPublish: pre.shouldAutoPublish,
+        routedLane: pre.routedLane,
+        routingReason: pre.routingReason,
+      });
+    }
+    if (pre.shouldAutoPublish) {
+      const result = await transitionContentStatus(
+        entityType,
+        entityId,
+        "published",
+        actorId ?? null,
+        "Auto-published by quality gate (centralized routing)",
+        undefined,
+        true
+      );
+      if (!result.success) {
+        return { published: false, routedToReview: false, reason: result.blockPublishReason ?? result.error };
+      }
+      if (isSupabaseServiceRoleConfigured()) {
+        const supabase = createServiceClient();
+        await supabase.from("publish_audit").insert({
+          entity_type: entityType,
+          entity_id: entityId,
+          from_status: fromStatus,
+          to_status: "published",
+          actor_id: actorId ?? null,
+          reason: "Auto-published by quality gate (centralized routing)",
+          auto_publish: true,
+        });
+        await recordAutoPublishMetric("auto_published", contentType);
+        const { data: meta } = await supabase
+          .from("content_quality_metadata")
+          .select("generation_metadata")
+          .eq("entity_type", entityType)
+          .eq("entity_id", entityId)
+          .single();
+        const existing = (meta?.generation_metadata as Record<string, unknown>) ?? {};
+        await supabase
+          .from("content_quality_metadata")
+          .update({
+            generation_metadata: { ...existing, publish_reason: "high_confidence_auto_publish" } as unknown,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("entity_type", entityType)
+          .eq("entity_id", entityId);
+      }
+      return { published: true, routedToReview: false, routingLane: undefined };
+    }
+    if (fromStatus === "draft") {
+      const result = await transitionContentStatus(
+        entityType,
+        entityId,
+        "editor_review",
+        actorId ?? null,
+        `Routed to review: ${pre.routingReason}`,
+        undefined,
+        false
+      );
+      if (result.success && isSupabaseServiceRoleConfigured()) {
+        const supabase = createServiceClient();
+        await recordAutoPublishMetric("routed_to_review", contentType);
+        if (pre.routedLane === "legal") await recordAutoPublishMetric("legal_exception", contentType);
+        const { data: row } = await supabase
+          .from("content_quality_metadata")
+          .select("generation_metadata")
+          .eq("entity_type", entityType)
+          .eq("entity_id", entityId)
+          .single();
+        const existing = (row?.generation_metadata as Record<string, unknown>) ?? {};
+        await supabase
+          .from("content_quality_metadata")
+          .update({
+            generation_metadata: {
+              ...existing,
+              routing_lane: pre.routedLane,
+              routing_reason: pre.routingReason,
+              routedToReviewReason: pre.routingReason,
+              routedAt: new Date().toISOString(),
+            } as unknown,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("entity_type", entityType)
+          .eq("entity_id", entityId);
+      }
+    }
+    return {
+      published: false,
+      routedToReview: true,
+      reason: pre.routingReason,
+      routingLane: pre.routedLane,
+    };
+  }
+
   const eval_ = await evaluateAutoPublishEligibility(entityType, entityId, contentType);
   const reviewFlags = options?.reviewFlags;
   const hasFlags = reviewFlags ? hasAnyReviewFlag(reviewFlags) : (eval_.routedTo === "editor_review");
@@ -126,6 +236,7 @@ export async function runAutoPublishFlow(
       published: result.published,
       routedToReview: false,
       reason: result.reason,
+      routingLane: undefined,
     };
   }
 
@@ -171,6 +282,7 @@ export async function runAutoPublishFlow(
     published: false,
     routedToReview: true,
     reason: eval_.routingReason ?? eval_.reason,
+    routingLane: eval_.routingLane ?? "editorial",
   };
 }
 

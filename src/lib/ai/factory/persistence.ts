@@ -24,6 +24,7 @@ import type { ExtendedQuestionOutput } from "@/lib/ai/content-factory/parsers";
 import {
   validateQuestionPayload,
   normalizeQuestionPayload,
+  ensureQuestionPackageComplete,
 } from "@/lib/ai/question-factory";
 import {
   validateStudyGuidePayload,
@@ -48,6 +49,7 @@ import {
   appendToGenerationMemory,
   type ScenarioArchetype,
 } from "@/lib/ai/scenario-diversification";
+import { trackSlugToGenerationProfile } from "@/config/ai-factory";
 
 const AI_STATUS = "draft" as const; // Always draft; editor_review can be set later
 
@@ -126,7 +128,8 @@ export async function persistQuestion(
 
     if (isExtendedQuestionOutput(draft)) {
       const payload = toQuestionPayload(draft);
-      const validation = validateQuestionPayload(payload);
+      ensureQuestionPackageComplete(payload);
+      const validation = validateQuestionPayload(payload, { lenient: true });
       if (!validation.valid) {
         return { success: false, error: validation.errors.join("; ") };
       }
@@ -143,6 +146,7 @@ export async function persistQuestion(
         aiGenerated: true,
         source: "ai_content_factory",
         scenario_archetype: archetype,
+        generation_profile: trackSlugToGenerationProfile(config.trackSlug ?? ""),
       };
       stem = normalized.question.stem;
       options = normalized.options.map((o) => ({
@@ -162,11 +166,15 @@ export async function persistQuestion(
         aiGenerated: true,
         source: "ai_content_factory",
         scenario_archetype: archetype,
+        generation_profile: trackSlugToGenerationProfile(config.trackSlug ?? ""),
       };
       stem = draft.stem.trim();
+      const drFallback = (rationale ?? "").trim().length >= 20 ? "Incorrect—see rationale." : "Incorrect.";
       options = draft.options.map((opt, i) => {
         const optionMetadata: Record<string, unknown> = {};
-        if (opt.distractorRationale?.trim()) optionMetadata.rationale = opt.distractorRationale;
+        const dr = opt.distractorRationale?.trim();
+        const useDr = dr || (!opt.isCorrect ? drFallback : undefined);
+        if (useDr) optionMetadata.rationale = useDr;
         return {
           option_key: opt.key.trim().slice(0, 1) || "A",
           option_text: opt.text.trim(),

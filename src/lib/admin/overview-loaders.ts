@@ -13,6 +13,8 @@ import {
 export type OverviewInventoryRow = TrackInventoryRow & { highYieldContent?: number };
 import { loadAdminPublishQueue } from "@/lib/admin/loaders";
 import { getAutoPublishMetrics } from "@/lib/admin/auto-publish-metrics";
+import type { AiFactoryOperationalMetrics } from "@/lib/admin/ai-factory-operational-metrics";
+import { loadAiFactoryOperationalMetrics } from "@/lib/admin/ai-factory-operational-metrics";
 
 export interface LearnerSummary {
   totalLearners: number;
@@ -67,6 +69,8 @@ export interface AdminOverviewMetrics {
   recentErrors: { id: string; message: string; errorCode: string | null; createdAt: string }[];
   /** Lowest coverage systems by track (systems with fewest approved questions) */
   lowestCoverage: { trackSlug: string; systemName: string; questionCount: number }[];
+  /** Phase 1 AI Factory operational metrics (counts by lane, averages, top archetypes) */
+  aiFactoryOperationalMetrics: AiFactoryOperationalMetrics;
 }
 
 const REVIEW_STATUSES = [
@@ -402,6 +406,7 @@ export async function loadAdminOverviewMetrics(): Promise<AdminOverviewMetrics> 
     recentErrors,
     lowestCoverage,
     highYieldByTrack,
+    aiFactoryOperationalMetrics,
   ] = await Promise.all([
     loadLearnerSummary(),
     loadContentInventoryByTrack(),
@@ -415,6 +420,7 @@ export async function loadAdminOverviewMetrics(): Promise<AdminOverviewMetrics> 
     loadRecentErrors(10),
     loadLowestCoverage(3),
     loadHighYieldCountByTrack(),
+    loadAiFactoryOperationalMetrics({ windowDays: 30, topArchetypesLimit: 10 }),
   ]);
 
   const inventoryWithHighYield = inventory.map((row) => ({
@@ -434,5 +440,6 @@ export async function loadAdminOverviewMetrics(): Promise<AdminOverviewMetrics> 
     autoPublishMetrics,
     recentErrors,
     lowestCoverage,
+    aiFactoryOperationalMetrics,
   };
 }

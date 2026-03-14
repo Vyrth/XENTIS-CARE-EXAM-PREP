@@ -4,6 +4,7 @@ import { StatusBadge } from "@/components/admin/StatusBadge";
 import { AdminTrackFilter } from "@/components/admin/AdminTrackFilter";
 import { AIGeneratedBadge } from "@/components/admin/AIGeneratedBadge";
 import { ReviewQueueRowActions } from "@/components/admin/ReviewQueueRowActions";
+import { RoutingReasonBadges } from "@/components/admin/RoutingReasonBadges";
 import { loadExamTracks } from "@/lib/admin/loaders";
 import {
   loadReviewBacklog,
@@ -43,7 +44,7 @@ export default async function ReviewQueuePage({ searchParams }: Props) {
             Review Queue
           </h1>
           <p className="text-slate-600 dark:text-slate-400 mt-1">
-            Multi-lane content pipeline. Filter by role lane and track.
+            Triage exceptions and decide. No need to hand-enter source/legal for routine AI content.
           </p>
         </div>
         <AdminTrackFilter tracks={tracks} selectedTrackId={trackId} label="Filter by track" />
@@ -75,10 +76,10 @@ export default async function ReviewQueuePage({ searchParams }: Props) {
               : isValidLane
                 ? LANE_LABELS[activeLane]
                 : "Editorial"}{" "}
-            Backlog
+            — review exception and decide
           </h2>
           <p className="text-sm text-slate-500 mt-1">
-            {backlog.length} item{backlog.length !== 1 ? "s" : ""} awaiting review
+            {backlog.length} item{backlog.length !== 1 ? "s" : ""} in this lane
           </p>
         </div>
         <div className="overflow-x-auto">
@@ -89,7 +90,7 @@ export default async function ReviewQueuePage({ searchParams }: Props) {
                 <th className="text-left p-4 text-sm font-medium text-slate-500">Title</th>
                 <th className="text-left p-4 text-sm font-medium text-slate-500">Track</th>
                 <th className="text-left p-4 text-sm font-medium text-slate-500">Source</th>
-                <th className="text-left p-4 text-sm font-medium text-slate-500">Flags</th>
+                <th className="text-left p-4 text-sm font-medium text-slate-500">Exception</th>
                 <th className="text-left p-4 text-sm font-medium text-slate-500">Status</th>
                 <th className="text-left p-4 text-sm font-medium text-slate-500">Actions</th>
               </tr>
@@ -130,24 +131,10 @@ export default async function ReviewQueuePage({ searchParams }: Props) {
                         )}
                       </td>
                       <td className="p-4">
-                        {item.reviewFlags ? (
-                          <div className="flex flex-wrap gap-1">
-                            {item.reviewFlags.requires_editorial_review && (
-                              <span className="text-xs px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400">Editor</span>
-                            )}
-                            {item.reviewFlags.requires_sme_review && (
-                              <span className="text-xs px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400">SME</span>
-                            )}
-                            {item.reviewFlags.requires_legal_review && (
-                              <span className="text-xs px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400">Legal</span>
-                            )}
-                            {item.reviewFlags.requires_qa_review && (
-                              <span className="text-xs px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400">QA</span>
-                            )}
-                          </div>
-                        ) : (
-                          <span className="text-xs text-slate-400">—</span>
-                        )}
+                        <RoutingReasonBadges
+                          routingReason={item.routingReason}
+                          reviewFlags={item.reviewFlags}
+                        />
                       </td>
                       <td className="p-4">
                         <StatusBadge status={item.status as WorkflowStatus} />
@@ -158,6 +145,7 @@ export default async function ReviewQueuePage({ searchParams }: Props) {
                           entityId={item.id}
                           currentStatus={item.status as WorkflowStatus}
                           editHref={editHref}
+                          routingReason={item.routingReason}
                         />
                       </td>
                     </tr>

@@ -12,11 +12,12 @@ import type { ScenarioArchetype } from "./archetypes";
 
 const BASE_NEGATIVE_CONSTRAINTS = `NEGATIVE CONSTRAINTS — Do NOT:
 - Repeat the same presenting complaint pattern (e.g. "presents with abdominal pain") across questions
-- Reuse nearly identical stem openings (e.g. "A 54-year-old female presents with...")
+- Reuse nearly identical stem openings (e.g. "A 54-year-old female presents with...") — each question must have a distinct case opening
 - Generate only middle-aged female abdominal pain cases — vary demographics and chief complaints
 - Default to "clinic" or "ED" — use telehealth, follow-up, inpatient, home health when appropriate
 - Use the same clinical phase (e.g. all diagnosis) — mix assessment, management, prevention, patient education
-- Focus only on pharmacology — include non-pharmacology and mixed-angle questions`;
+- Focus only on pharmacology — include non-pharmacology and mixed-angle questions
+- Start multiple questions with the same demographic + setting + complaint; vary age band, care setting, and chief complaint for every question in the batch`;
 
 /**
  * Build negative constraints block from generation memory.

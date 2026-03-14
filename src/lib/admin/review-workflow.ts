@@ -55,6 +55,8 @@ export interface ReviewBacklogItem {
     requires_legal_review: boolean;
     requires_qa_review: boolean;
   };
+  /** Why this item was routed to review (for exception badges) */
+  routingReason?: string | null;
 }
 
 export interface ReviewNoteRow {
@@ -146,7 +148,7 @@ export async function loadReviewBacklog(
       list.push(item.id);
       byType.set(item.type, list);
     }
-    const metaByKey = new Map<string, Record<string, unknown>>();
+    const metaByKey = new Map<string, { flags: ReviewBacklogItem["reviewFlags"]; routingReason: string | null }>();
     for (const [entityType, ids] of byType) {
       const { data: metaRows } = await supabase
         .from("content_quality_metadata")
@@ -155,12 +157,23 @@ export async function loadReviewBacklog(
         .in("entity_id", ids);
       for (const r of metaRows ?? []) {
         const gm = (r.generation_metadata as Record<string, unknown>) ?? {};
-        if (gm.requires_editorial_review != null || gm.requires_sme_review != null || gm.requires_legal_review != null || gm.requires_qa_review != null) {
+        const hasFlags =
+          gm.requires_editorial_review != null ||
+          gm.requires_sme_review != null ||
+          gm.requires_legal_review != null ||
+          gm.requires_qa_review != null;
+        const routingReason = (gm.routing_reason ?? gm.routedToReviewReason) as string | null;
+        if (hasFlags || routingReason) {
           metaByKey.set(`${entityType}-${r.entity_id}`, {
-            requires_editorial_review: !!gm.requires_editorial_review,
-            requires_sme_review: !!gm.requires_sme_review,
-            requires_legal_review: !!gm.requires_legal_review,
-            requires_qa_review: !!gm.requires_qa_review,
+            flags: hasFlags
+              ? {
+                  requires_editorial_review: !!gm.requires_editorial_review,
+                  requires_sme_review: !!gm.requires_sme_review,
+                  requires_legal_review: !!gm.requires_legal_review,
+                  requires_qa_review: !!gm.requires_qa_review,
+                }
+              : undefined,
+            routingReason: routingReason ?? null,
           });
         }
       }
@@ -172,9 +185,10 @@ export async function loadReviewBacklog(
         item.aiGenerated = true;
         item.aiSourceSummary = buildGenerationSourceSummary(rec.generationParams);
       }
-      const flags = metaByKey.get(`${item.type}-${item.id}`);
-      if (flags) {
-        item.reviewFlags = flags as ReviewBacklogItem["reviewFlags"];
+      const meta = metaByKey.get(`${item.type}-${item.id}`);
+      if (meta) {
+        if (meta.flags) item.reviewFlags = meta.flags;
+        if (meta.routingReason != null) item.routingReason = meta.routingReason;
       }
     }
 

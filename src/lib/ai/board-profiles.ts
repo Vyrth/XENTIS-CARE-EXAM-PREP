@@ -8,12 +8,15 @@
 
 import type { ExamTrack } from "./question-factory/types";
 import type { QuestionItemType } from "./question-factory/types";
+import type { GenerationProfile } from "@/config/ai-factory";
 
-export type BoardProfileId = "NCLEX_RN" | "NCLEX_LVN" | "FNP_BOARD" | "PMHNP_BOARD";
+export type BoardProfileId = GenerationProfile;
 
 export interface BoardProfile {
   id: BoardProfileId;
   name: string;
+  /** Short prompt instruction focus (safety, first action, diagnosis, etc.) — varies by board. */
+  promptInstructionFocus: string;
   /** How to write items: stem structure, question phrasing, NCLEX vs board style */
   itemWritingStyle: string;
   /** Preferred clinical settings (emphasize in scenarios) */
@@ -35,6 +38,8 @@ export interface BoardProfile {
 const NCLEX_RN_PROFILE: BoardProfile = {
   id: "NCLEX_RN",
   name: "NCLEX-RN",
+  promptInstructionFocus:
+    "Emphasize: safety, first action, prioritization, delegation, and patient teaching. Questions should test nursing process and clinical judgment.",
   itemWritingStyle: `NCLEX-style item writing: scenario-based stems with a single best answer. Emphasize what the nurse should do first, which client to see first, or which action is most appropriate. Use nursing process language (assess, plan, implement, evaluate). Stems often present a situation and ask for the next action, priority, or best response. Avoid medical diagnosis as the endpoint—focus on nursing intervention and safety.`,
   preferredClinicalSetting: `Vary settings: acute care (medical-surgical, ICU, ED), long-term care, community, clinic. Prioritization and delegation questions often use acute or shift-based scenarios. Include telemetry, post-op, and bedside nursing contexts.`,
   cognitiveLevelEmphasis: `Emphasize: safety and prioritization (ABCs, Maslow, risk), delegation (RN vs LPN vs UAP), first action / immediate intervention, nursing assessment before action, and clinical judgment. Mix application and analysis; avoid pure recall. "Which client to see first?" and "What is the nurse's best response?" are classic.`,
@@ -58,6 +63,8 @@ const NCLEX_RN_PROFILE: BoardProfile = {
 const NCLEX_LVN_PROFILE: BoardProfile = {
   id: "NCLEX_LVN",
   name: "NCLEX-PN / LVN/LPN",
+  promptInstructionFocus:
+    "Emphasize: safety, first action, prioritization, delegation, and patient teaching within LVN scope. When to report to RN or provider.",
   itemWritingStyle: `LVN/LPN item writing: simpler, more concrete stems. Focus on tasks within LVN scope: data collection, reporting, basic nursing care, medication administration (within scope), and when to notify the RN or provider. Use clear, direct language. Avoid complex multi-step reasoning that assumes RN-level decision-making.`,
   preferredClinicalSetting: `Skilled nursing, long-term care, clinic, home health, and acute care under RN direction. Emphasize settings where LVNs commonly work: vital signs, ADLs, wound care, medication pass, documentation, and reporting.`,
   cognitiveLevelEmphasis: `Emphasize: safe scope of practice (what LVN can and cannot do), when to report to RN/provider, fundamentals (infection control, safety, basic care), medication administration safety, and documentation. Application over analysis; avoid advanced prioritization that requires RN judgment.`,
@@ -79,6 +86,8 @@ const NCLEX_LVN_PROFILE: BoardProfile = {
 const FNP_BOARD_PROFILE: BoardProfile = {
   id: "FNP_BOARD",
   name: "FNP Certification (ANCC/AANP)",
+  promptInstructionFocus:
+    "Emphasize: outpatient management, screening, and primary care decision-making. Diagnosis, workup, first-line treatment, and guideline-based management.",
   itemWritingStyle: `FNP board-style: primary care management focus. Stems typically present a patient in outpatient or clinic setting with symptoms or findings; ask for diagnosis, next step in workup, first-line treatment, or follow-up. Use guideline-based language (e.g., USPSTF, specialty guidelines). Differential diagnosis and "most likely" or "best next step" are common.`,
   preferredClinicalSetting: `Outpatient primary care, clinic, telehealth, and follow-up visits. Screening, chronic disease management, acute office visits, and preventive care. Inpatient only when relevant to primary care (e.g., discharge follow-up).`,
   cognitiveLevelEmphasis: `Emphasize: diagnosis (history, physical, labs/imaging), first-line management, screening recommendations, when to refer, guideline-based treatment, and follow-up. Application and analysis; integrate USPSTF and specialty guidelines.`,
@@ -99,6 +108,8 @@ const FNP_BOARD_PROFILE: BoardProfile = {
 const PMHNP_BOARD_PROFILE: BoardProfile = {
   id: "PMHNP_BOARD",
   name: "PMHNP Certification (ANCC)",
+  promptInstructionFocus:
+    "Emphasize: psychiatric diagnosis (DSM-aligned), psychopharmacology, and safety/risk (suicide, violence, capacity). When to hospitalize or adjust treatment.",
   itemWritingStyle: `PMHNP board-style: psychiatric diagnosis and treatment. Stems present a patient with mental health symptoms or history; ask for DSM-aligned diagnosis, best medication, therapy modality, or risk assessment. Use DSM-5-TR language and psychiatric terminology. Psychopharmacology and safety (suicide, violence, capacity) are core.`,
   preferredClinicalSetting: `Outpatient psychiatry, partial hospitalization, inpatient psychiatric unit, crisis assessment, telehealth. Include therapy settings and medication management visits.`,
   cognitiveLevelEmphasis: `Emphasize: DSM differential diagnosis, psychopharmacology (indications, side effects, interactions), suicide and violence risk assessment, therapeutic communication, and when to hospitalize or adjust treatment. Application and analysis; align logic to DSM and evidence-based psych care.`,
@@ -115,6 +126,27 @@ const PMHNP_BOARD_PROFILE: BoardProfile = {
   evidenceFraming: `Frame evidence using DSM-5-TR, ANCC PMHNP outline, and psychopharmacology/guideline sources (e.g., APA, VA/DoD). primary_reference: ancc_pmhnp_outline, dsm5tr. guideline_reference for APA or SAMHSA when applicable. evidence_tier: 1 test plan, 2 Stahl/Kaplan-Sadock, 3 guidelines.`,
 };
 
+const USMLE_STYLE_PROFILE: BoardProfile = {
+  id: "USMLE_STYLE",
+  name: "USMLE-style",
+  promptInstructionFocus:
+    "Emphasize: diagnosis, pathophysiology, and next best step. Clinical vignettes with basic science integration; Step 1/2 CK-style single best answer.",
+  itemWritingStyle: `USMLE-style item writing: clinical vignettes with focused stems. Ask for most likely diagnosis, next best step, or mechanism. Use NBME-style formatting; integrate basic science where appropriate. Single best answer with one clearly correct option.`,
+  preferredClinicalSetting: `Vary settings: inpatient, outpatient, emergency, clinic. Classic vignette structure: patient presentation, key findings, then question.`,
+  cognitiveLevelEmphasis: `Emphasize: differential diagnosis, pathophysiology, next best step (workup or treatment), and mechanism-based reasoning. Application and analysis; avoid pure recall.`,
+  allowedQuestionTypes: [
+    "single_best_answer",
+    "multiple_response",
+    "case_study",
+    "chart_table_exhibit",
+    "select_n",
+  ],
+  rationaleStyle: `Rationale must explain why the answer is correct (diagnosis, next step, or mechanism). For wrong options: why they are incorrect or less appropriate. Teaching point: high-yield takeaway.`,
+  distractorStyle: `Distractors: other plausible diagnoses, alternative next steps, or wrong mechanisms. Plausible but clearly incorrect.`,
+  safetyConstraints: `Stay within standard medical knowledge; no experimental or off-label as first choice unless commonly tested.`,
+  evidenceFraming: `Frame evidence using standard medical references. primary_reference and guideline_reference as appropriate. evidence_tier: 1 test plan, 2 textbooks, 3 guidelines.`,
+};
+
 const TRACK_TO_PROFILE: Record<ExamTrack, BoardProfile> = {
   rn: NCLEX_RN_PROFILE,
   lvn: NCLEX_LVN_PROFILE,
@@ -122,15 +154,30 @@ const TRACK_TO_PROFILE: Record<ExamTrack, BoardProfile> = {
   pmhnp: PMHNP_BOARD_PROFILE,
 };
 
+const PROFILE_BY_ID: Record<BoardProfileId, BoardProfile> = {
+  NCLEX_RN: NCLEX_RN_PROFILE,
+  NCLEX_LVN: NCLEX_LVN_PROFILE,
+  FNP_BOARD: FNP_BOARD_PROFILE,
+  PMHNP_BOARD: PMHNP_BOARD_PROFILE,
+  USMLE_STYLE: USMLE_STYLE_PROFILE,
+};
+
 /** Get the board profile for an exam track */
 export function getBoardProfile(track: ExamTrack): BoardProfile {
   return TRACK_TO_PROFILE[track];
+}
+
+/** Get the board profile by generation profile id (e.g. from metadata). */
+export function getBoardProfileById(profileId: BoardProfileId): BoardProfile {
+  return PROFILE_BY_ID[profileId] ?? NCLEX_RN_PROFILE;
 }
 
 /** Build the combined board-profile block for prompt composition (item style, setting, cognitive level, rationale, distractor, safety, evidence) */
 export function buildBoardProfilePromptBlock(profile: BoardProfile): string {
   const allowedTypesList = profile.allowedQuestionTypes.join(", ").replace(/_/g, " ");
   return `BOARD PROFILE: ${profile.name} (${profile.id})
+
+Prompt instruction focus: ${profile.promptInstructionFocus}
 
 Item-writing style: ${profile.itemWritingStyle}
 

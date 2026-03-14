@@ -20,6 +20,7 @@ import {
   buildScopeKey,
   appendToGenerationMemory,
   checkBatchVariety,
+  getDuplicateArchetypeIndicesInBatch,
 } from "@/lib/ai/scenario-diversification";
 import { BULK_CHUNK_SIZES } from "./bulk-persistence-config";
 import type { GenerationConfig } from "./types";
@@ -30,6 +31,7 @@ import type { HighYieldDraft } from "./persistence";
 import {
   validateQuestionPayload,
   normalizeQuestionPayload,
+  ensureQuestionPackageComplete,
 } from "@/lib/ai/question-factory";
 import { validateFlashcardDeckPayload } from "@/lib/ai/flashcard-factory";
 import { validateHighYieldPayload } from "@/lib/ai/high-yield-factory/validation";
@@ -39,14 +41,70 @@ import { DECK_TYPE_MAP } from "@/lib/ai/flashcard-factory/types";
 import type { QuestionOptionOutput } from "@/lib/ai/content-factory/types";
 import { computeQuestionQualityScore } from "@/lib/ai/content-quality-scoring";
 import { validateQuestionMedically } from "@/lib/ai/ai-medical-validator";
-import { computeReviewFlags } from "@/lib/admin/review-flags";
+import { resolveQuestionRouting, routingResultToReviewFlags } from "@/lib/ai/review-routing";
+import {
+  computeStemFingerprint,
+  detectDuplicateRisk,
+  scenarioArchetypeKey,
+  type StemFingerprint,
+  type DuplicateRiskResult,
+  type ExistingCandidate,
+} from "@/lib/ai/duplicate-detection";
 import { upsertContentQualityMetadata, runAutoPublishFlow } from "@/lib/admin/auto-publish";
 import { getSourceFrameworkForTrack } from "@/lib/admin/autonomous-operations";
-import { ensureContentEvidenceMetadata, hasValidSourceMapping } from "@/lib/admin/source-governance";
-import { ensureSourceEvidenceForAIGeneratedContent } from "@/lib/admin/source-evidence";
+import { ensureContentEvidenceMetadata, hasValidSourceMapping, getApprovedSourcesForTrack } from "@/lib/admin/source-governance";
+import { ensureSourceEvidenceForAIGeneratedContent, AI_ORIGINAL_AUTHOR_NOTES, loadSourceEvidence } from "@/lib/admin/source-evidence";
 import { QUESTIONS_TRACK_COLUMN } from "@/config/content";
+import { trackSlugToGenerationProfile } from "@/config/ai-factory";
 
 const CHUNK = BULK_CHUNK_SIZES;
+
+/** Standard AI-generated original content: cleared for publish, no manual legal entry. */
+const SOURCE_BASIS_APPROVED_INTERNAL = "approved_internal_framework";
+
+export interface QuestionGenerationAuditPayload {
+  question_id: string;
+  batch_job_id?: string | null;
+  campaign_id?: string | null;
+  generation_profile?: string | null;
+  scenario_archetype?: unknown;
+  confidence_score?: number | null;
+  similarity_score?: number | null;
+  medical_validation_status?: string | null;
+  evidence_mapping_status?: string | null;
+  legal_status?: string | null;
+  auto_published: boolean;
+  routed_lane?: string | null;
+  routing_reason?: string | null;
+}
+
+/** Write one row to ai_question_generation_audit. Non-blocking: on failure log in development only, do not throw. */
+async function writeQuestionGenerationAudit(payload: QuestionGenerationAuditPayload): Promise<void> {
+  try {
+    if (!isSupabaseServiceRoleConfigured()) return;
+    const supabase = createServiceClient();
+    const { error } = await supabase.from("ai_question_generation_audit").insert({
+      question_id: payload.question_id,
+      batch_job_id: payload.batch_job_id ?? null,
+      campaign_id: payload.campaign_id ?? null,
+      generation_profile: payload.generation_profile ?? null,
+      scenario_archetype: payload.scenario_archetype != null ? payload.scenario_archetype : null,
+      confidence_score: payload.confidence_score ?? null,
+      similarity_score: payload.similarity_score ?? null,
+      medical_validation_status: payload.medical_validation_status ?? null,
+      evidence_mapping_status: payload.evidence_mapping_status ?? null,
+      legal_status: payload.legal_status ?? null,
+      auto_published: payload.auto_published,
+      routed_lane: payload.routed_lane ?? null,
+      routing_reason: payload.routing_reason ?? null,
+    });
+    if (error) throw error;
+  } catch (err) {
+    if (process.env.NODE_ENV === "development" || process.env.DEBUG_AI_FACTORY === "1") {
+      console.warn("[bulk-persistence] ai_question_generation_audit insert failed (non-blocking):", err instanceof Error ? err.message : err);
+    }
+  }
+}
 
 export interface BulkQuestionItem {
   config: GenerationConfig;
@@ -155,12 +213,43 @@ function chunk<T>(arr: T[], size: number): T[][] {
   return out;
 }
 
+export interface ApplyQualityAndAutoPublishOptions {
+  batchJobId?: string | null;
+  campaignId?: string | null;
+  duplicateRiskResult?: DuplicateRiskResult | null;
+}
+
+/** Load existing candidates from question_similarity_index for duplicate risk check. Returns [] if table missing or error. */
+async function loadSimilarityCandidates(
+  supabase: ReturnType<typeof createServiceClient>,
+  examTrackId: string,
+  topicId: string | null,
+  systemId: string | null
+): Promise<ExistingCandidate[]> {
+  try {
+    let q = supabase
+      .from("question_similarity_index")
+      .select("normalized_stem_hash, normalized_content_hash, scenario_archetype_key")
+      .eq("exam_track_id", examTrackId);
+    if (topicId != null) q = q.eq("topic_id", topicId);
+    else q = q.is("topic_id", null);
+    if (systemId != null) q = q.eq("system_id", systemId);
+    else q = q.is("system_id", null);
+    const { data, error } = await q.limit(500);
+    if (error) return [];
+    return (data ?? []) as ExistingCandidate[];
+  } catch {
+    return [];
+  }
+}
+
 async function applyQualityAndAutoPublish(
   entityType: string,
   entityId: string,
   draft: BulkQuestionItem["draft"],
   fromStatus: string,
-  config: BulkQuestionItem["config"]
+  config: BulkQuestionItem["config"],
+  batchOpts?: ApplyQualityAndAutoPublishOptions
 ): Promise<void> {
   const validationMode = "lenient";
 
@@ -186,6 +275,11 @@ async function applyQualityAndAutoPublish(
       await ensureSourceEvidenceForAIGeneratedContent(entityType, entityId);
       const sourceCheck = await hasValidSourceMapping(entityType, entityId, config.trackSlug);
       evidenceMappingOk = evidenceMappingOk && sourceCheck.valid;
+    }
+
+    let evidence: Awaited<ReturnType<typeof loadSourceEvidence>> = null;
+    if (entityType === "question" && isSupabaseServiceRoleConfigured()) {
+      evidence = await loadSourceEvidence(entityType, entityId);
     }
 
     if (process.env.NODE_ENV === "development" || process.env.DEBUG_AI_FACTORY === "1") {
@@ -214,18 +308,27 @@ async function applyQualityAndAutoPublish(
       system: (draft as { system?: string }).system,
       topic: (draft as { topic?: string }).topic,
     });
-    const reviewFlags = computeReviewFlags({
-      validationErrors: quality.validationErrors,
+    const hasRationale = Boolean((draft as { rationale?: string }).rationale?.trim());
+    const optionsList = Array.isArray(draft.options) ? draft.options : [];
+    const optionStructureOk = optionsList.length >= 2 && optionsList.some((o) => o && (o as { isCorrect?: boolean }).isCorrect === true);
+    const boardStyleMismatch = quality.validationErrors?.some((e) => /board|style|stem.*length/i.test(String(e)));
+
+    const routing = resolveQuestionRouting({
       validationStatus: quality.validationStatus,
-      hasRationale: Boolean((draft as { rationale?: string }).rationale?.trim()),
-      evidenceMappingOk,
-      aiValidationPassed: medicalValidation.passed,
-      aiValidationConfidence: medicalValidation.confidence,
-      boardStyleMismatch: quality.validationErrors?.some((e) => /board|style|stem.*length/i.test(String(e))),
+      validationErrors: quality.validationErrors,
+      hasRationale,
+      optionStructureOk,
+      medical_validation_status: medicalValidation.passed ? "passed" : "failed",
+      evidence_mapping_status: evidenceMappingOk ? "valid" : "invalid",
+      legal_status: evidence?.legalStatus,
+      source_basis: evidence?.sourceBasis,
+      quality_score: quality.qualityScore ?? null,
+      similarity_score: batchOpts?.duplicateRiskResult?.similarityScore ?? null,
+      confidence_score: medicalValidation.confidence ?? null,
+      boardStyleMismatch,
     });
-    const noFlags = !reviewFlags.requires_editorial_review && !reviewFlags.requires_sme_review && !reviewFlags.requires_legal_review && !reviewFlags.requires_qa_review;
-    const autoPublishEligible =
-      noFlags && quality.autoPublishEligible && medicalValidation.passed && !medicalValidation.requiresHumanReview;
+
+    const reviewFlags = routingResultToReviewFlags(routing);
     const generationMetadata: Record<string, unknown> = {
       source: "ai_content_factory",
       ai_validation_passed: medicalValidation.passed,
@@ -237,26 +340,121 @@ async function applyQualityAndAutoPublish(
       requires_sme_review: reviewFlags.requires_sme_review,
       requires_legal_review: reviewFlags.requires_legal_review,
       requires_qa_review: reviewFlags.requires_qa_review,
+      routing_lane: routing.routedLane,
+      routing_reason: routing.routingReason,
     };
 
     if (process.env.NODE_ENV === "development" || process.env.DEBUG_AI_FACTORY === "1") {
-      console.info("[bulk-persistence] applyQualityAndAutoPublish after", {
+      console.info("[bulk-persistence] applyQualityAndAutoPublish after (centralized routing)", {
         qualityScore: quality.qualityScore,
         validationStatus: quality.validationStatus,
-        autoPublishEligible,
+        shouldAutoPublish: routing.shouldAutoPublish,
+        routedLane: routing.routedLane,
         aiValidationPassed: medicalValidation.passed,
-        hasReviewFlags: !noFlags,
       });
+      if (entityType === "question" && !routing.shouldAutoPublish) {
+        console.info("[bulk-persistence] question routed instead of auto-published", {
+          entityId,
+          routedLane: routing.routedLane,
+          reason: routing.routingReason,
+        });
+      }
     }
 
     await upsertContentQualityMetadata(entityType, entityId, {
       qualityScore: quality.qualityScore,
-      autoPublishEligible,
+      autoPublishEligible: routing.shouldAutoPublish,
       validationStatus: quality.validationStatus,
       validationErrors: quality.validationErrors,
       generationMetadata,
     });
-    await runAutoPublishFlow(entityType, entityId, "question", fromStatus, null, { reviewFlags });
+
+    if (entityType === "question" && isSupabaseServiceRoleConfigured()) {
+      const framework = await getSourceFrameworkForTrack(config.trackSlug);
+      const ext = draft as { primaryReference?: string; guidelineReference?: string; evidenceTier?: 1 | 2 | 3 };
+      const sources = await getApprovedSourcesForTrack(config.trackSlug);
+      const primaryName = ext.primaryReference
+        ? sources.find((s) => s.slug === ext.primaryReference)?.name ?? ext.primaryReference
+        : null;
+      const supabase = createServiceClient();
+      const { data: qRow } = await supabase
+        .from("questions")
+        .select("stem_metadata")
+        .eq("id", entityId)
+        .single();
+      const existingMeta = (qRow?.stem_metadata as Record<string, unknown>) ?? {};
+      const updatedMeta = {
+        ...existingMeta,
+        ...(medicalValidation.confidence != null && { confidence_score: medicalValidation.confidence }),
+        ...(framework?.name != null && { source_framework_name: framework.name }),
+        ...(primaryName != null && { primary_reference_name: primaryName }),
+      };
+      const governanceUpdated = Object.keys(updatedMeta).filter(
+        (k) => k === "confidence_score" || k === "source_framework_name" || k === "primary_reference_name"
+      );
+      if (governanceUpdated.length > 0) {
+        await supabase
+          .from("questions")
+          .update({
+            stem_metadata: updatedMeta,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", entityId);
+        if (process.env.NODE_ENV === "development" || process.env.DEBUG_AI_FACTORY === "1") {
+          console.info("[bulk-persistence] governance post-insert fields set", {
+            entityId,
+            filled: governanceUpdated,
+            confidence_score: updatedMeta.confidence_score,
+            source_framework_name: updatedMeta.source_framework_name,
+          });
+        }
+      }
+    }
+
+    const runResult = await runAutoPublishFlow(entityType, entityId, "question", fromStatus, null, {
+      preResolvedRouting: {
+        shouldAutoPublish: routing.shouldAutoPublish,
+        routedLane: routing.routedLane,
+        routingReason: routing.routingReason,
+      },
+    });
+
+    if (entityType === "question") {
+      try {
+        const supabase = createServiceClient();
+        const [qRow, evidence] = await Promise.all([
+          supabase.from("questions").select("stem_metadata").eq("id", entityId).single(),
+          loadSourceEvidence(entityType, entityId),
+        ]);
+        const stemMeta = (qRow?.data?.stem_metadata as Record<string, unknown>) ?? {};
+        const similarityScore =
+          stemMeta.stem_similarity != null || stemMeta.payload_similarity != null
+            ? Math.max(
+                Number(stemMeta.stem_similarity ?? 0),
+                Number(stemMeta.payload_similarity ?? 0)
+              )
+            : null;
+        await writeQuestionGenerationAudit({
+          question_id: entityId,
+          batch_job_id: batchOpts?.batchJobId ?? null,
+          campaign_id: batchOpts?.campaignId ?? null,
+          generation_profile: (stemMeta.generation_profile as string) ?? null,
+          scenario_archetype: stemMeta.scenario_archetype ?? null,
+          confidence_score: stemMeta.confidence_score != null ? Number(stemMeta.confidence_score) : null,
+          similarity_score: similarityScore != null && !Number.isNaN(similarityScore) ? similarityScore : null,
+          medical_validation_status: medicalValidation.passed ? "passed" : "failed",
+          evidence_mapping_status: evidenceMappingOk ? "valid" : "invalid",
+          legal_status: evidence?.legalStatus ?? null,
+          auto_published: runResult.published,
+          routed_lane: runResult.routingLane ?? null,
+          routing_reason: runResult.reason ?? null,
+        });
+      } catch (auditErr) {
+        if (process.env.NODE_ENV === "development" || process.env.DEBUG_AI_FACTORY === "1") {
+          console.warn("[bulk-persistence] question generation audit write failed (non-blocking):", auditErr instanceof Error ? auditErr.message : auditErr);
+        }
+      }
+    }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     const code = err instanceof Error && "code" in err ? String((err as { code?: string }).code) : "quality_flow_error";
@@ -276,23 +474,46 @@ async function applyQualityAndAutoPublish(
   }
 }
 
-/** Auto-fill missing distractor rationale for wrong options (lenient bulk mode). */
-function ensureDistractorRationales(
-  payload: { options: { key?: string; text?: string; isCorrect?: boolean; distractorRationale?: string }[]; rationale?: string }
-): void {
-  const rationale = (payload.rationale ?? "").trim();
-  const fallback = rationale.length >= 20 ? `Incorrect—see rationale.` : "Incorrect.";
-  for (const o of payload.options ?? []) {
-    if (o && !o.isCorrect && (!o.distractorRationale || !o.distractorRationale.trim())) {
-      (o as { distractorRationale?: string }).distractorRationale = fallback;
-    }
+/** Enrich stem_metadata with AI governance fields (when available) and standard AI defaults. */
+function enrichStemMetadataWithGovernance(
+  stemMetadata: Record<string, unknown>,
+  draft: BulkQuestionItem["draft"],
+  config: BulkQuestionItem["config"]
+): { filled: string[] } {
+  const filled: string[] = [];
+  const ext = draft as { primaryReference?: string; guidelineReference?: string; evidenceTier?: 1 | 2 | 3 };
+  if (ext.primaryReference != null && ext.primaryReference !== "") {
+    stemMetadata.source_slug = ext.primaryReference;
+    filled.push("source_slug");
   }
+  if (ext.evidenceTier != null && ext.evidenceTier >= 1 && ext.evidenceTier <= 3) {
+    stemMetadata.evidence_tier = ext.evidenceTier;
+    filled.push("evidence_tier");
+  }
+  const profile = trackSlugToGenerationProfile(config.trackSlug ?? "");
+  stemMetadata.generation_profile = profile;
+  filled.push("generation_profile");
+  stemMetadata.source_basis = SOURCE_BASIS_APPROVED_INTERNAL;
+  stemMetadata.author_attribution_notes = AI_ORIGINAL_AUTHOR_NOTES;
+  filled.push("source_basis", "author_attribution_notes");
+  if (stemMetadata.scenario_archetype != null) filled.push("scenario_archetype");
+  return { filled };
 }
 
-/** Build question row + options, with stem_normalized_hash for dedupe */
+function draftToQuestionForDedupe(draft: BulkQuestionItem["draft"]): { stem: string; leadIn?: string; options?: { key?: string; text?: string }[]; rationale?: string } {
+  const d = draft as { stem?: string; leadIn?: string; options?: { key?: string; text?: string }[]; rationale?: string };
+  return {
+    stem: d.stem ?? "",
+    leadIn: d.leadIn,
+    options: d.options,
+    rationale: d.rationale,
+  };
+}
+
+/** Build question row + options, with stem_normalized_hash and fingerprint hashes for dedupe. */
 function buildQuestionRows(
   item: BulkQuestionItem
-): { questionRow: Record<string, unknown>; optionRows: Record<string, unknown>[]; stemHash: string } | null {
+): { questionRow: Record<string, unknown>; optionRows: Record<string, unknown>[]; stemHash: string; fingerprint: StemFingerprint } | null {
   const config = item.config;
   if (!config?.trackId?.trim()) return null;
   const draft = item.draft;
@@ -300,10 +521,12 @@ function buildQuestionRows(
   let stem: string;
   let options: { option_key: string; option_text: string; is_correct: boolean; option_metadata: Record<string, unknown>; display_order: number }[];
   let stemMetadata: Record<string, unknown>;
+  const questionForDedupe = draftToQuestionForDedupe(draft);
+  const fingerprint = computeStemFingerprint(questionForDedupe);
 
   if (isExtendedQuestionOutput(draft)) {
     const payload = toQuestionPayload(draft);
-    ensureDistractorRationales(payload);
+    ensureQuestionPackageComplete(payload);
     const validation = validateQuestionPayload(payload, { lenient: true });
     if (!validation.valid) return null;
     const normalized = normalizeQuestionPayload(payload, {
@@ -320,6 +543,10 @@ function buildQuestionRows(
       source: "ai_content_factory",
       scenario_archetype: archetype,
     };
+    const gov1 = enrichStemMetadataWithGovernance(stemMetadata, draft, config);
+    if (process.env.NODE_ENV === "development" || process.env.DEBUG_AI_FACTORY === "1") {
+      console.info("[bulk-persistence] governance fields auto-filled (extended)", { filled: gov1.filled, generation_profile: stemMetadata.generation_profile });
+    }
     stem = normalized.question.stem;
     options = normalized.options.map((o) => ({
       option_key: o.option_key,
@@ -339,6 +566,10 @@ function buildQuestionRows(
       source: "ai_content_factory",
       scenario_archetype: archetype,
     };
+    const gov2 = enrichStemMetadataWithGovernance(stemMetadata, draft, config);
+    if (process.env.NODE_ENV === "development" || process.env.DEBUG_AI_FACTORY === "1") {
+      console.info("[bulk-persistence] governance fields auto-filled (draft)", { filled: gov2.filled, generation_profile: stemMetadata.generation_profile });
+    }
     stem = draft.stem.trim();
     const drFallback = rationale.trim().length >= 20 ? "Incorrect—see rationale." : "Incorrect.";
     options = draft.options.map((opt, i) => {
@@ -366,6 +597,8 @@ function buildQuestionRows(
     stem,
     stem_metadata: stemMetadata,
     stem_normalized_hash: stemHash,
+    normalized_stem_hash: fingerprint.normalized_stem_hash,
+    normalized_content_hash: fingerprint.normalized_content_hash,
     status,
   };
 
@@ -377,7 +610,7 @@ function buildQuestionRows(
       display_order: Number(o.display_order ?? 0),
     }));
 
-  return { questionRow, optionRows, stemHash };
+  return { questionRow, optionRows, stemHash, fingerprint };
 }
 
 export interface BulkPersistOptions {
@@ -515,8 +748,14 @@ export async function bulkPersistQuestions(
 
     toInsert = toInsert.filter((v) => !questionsDupSet.has(v.built.stemHash));
 
-    for (let i = toInsert.length - 1; i >= 0; i--) {
-      const v = toInsert[i];
+    const candidates = await loadSimilarityCandidates(supabase, trackId, topicId, systemId);
+    const toInsertWithRisk = toInsert.map((v) => ({
+      ...v,
+      duplicateRisk: detectDuplicateRisk(draftToQuestionForDedupe(v.item.draft), candidates),
+    }));
+
+    for (let i = toInsertWithRisk.length - 1; i >= 0; i--) {
+      const v = toInsertWithRisk[i];
       const draft = v.item.draft;
       const dupResult = await checkQuestionDuplicate(
         {
@@ -528,14 +767,24 @@ export async function bulkPersistQuestions(
         { examTrackId: trackId, topicId, systemId }
       );
       if (dupResult.isDuplicate) {
-        toInsert.splice(i, 1);
+        toInsertWithRisk.splice(i, 1);
       }
     }
-    allToInsert.push(...toInsert);
+    allToInsert.push(...toInsertWithRisk);
   }
 
   duplicateCount = valid.length - allToInsert.length;
   const toInsert = allToInsert;
+
+  const duplicateInBatchIndices = getDuplicateArchetypeIndicesInBatch(
+    toInsert.map((v) => v.built.fingerprint?.scenario_archetype_key ?? null)
+  );
+  if (duplicateInBatchIndices.size > 0 && (process.env.NODE_ENV === "development" || process.env.DEBUG_AI_FACTORY === "1")) {
+    console.info("[bulk-persistence] Phase 1 diversification: questions marked needs_revision (duplicate archetype in batch)", {
+      count: duplicateInBatchIndices.size,
+      indices: [...duplicateInBatchIndices],
+            });
+  }
 
   if (toInsert.length >= 3 && isSupabaseServiceRoleConfigured()) {
     const archetypes = toInsert
@@ -559,12 +808,27 @@ export async function bulkPersistQuestions(
   }
 
   const chunks = chunk(toInsert, CHUNK.questions);
-  for (const ch of chunks) {
-    const questionRows = ch.map((v) => ({
-      ...v.built.questionRow,
-      [QUESTIONS_TRACK_COLUMN]: v.item.config.trackId,
-      stem_normalized_hash: v.built.stemHash,
-    }));
+  for (let chunkIndex = 0; chunkIndex < chunks.length; chunkIndex++) {
+    const ch = chunks[chunkIndex];
+    const startIdx = chunkIndex * CHUNK.questions;
+    const questionRows = ch.map((v, i) => {
+      const globalIdx = startIdx + i;
+      const duplicateInBatch = duplicateInBatchIndices.has(globalIdx);
+      const status = duplicateInBatch ? "needs_revision" : (v.built.questionRow.status as string);
+      const stemMetadata = {
+        ...(v.built.questionRow.stem_metadata as Record<string, unknown>),
+        ...(duplicateInBatch && {
+          routing_reason: "Same scenario archetype as another question in batch; flagged for regeneration.",
+        }),
+      };
+      return {
+        ...v.built.questionRow,
+        status,
+        stem_metadata: stemMetadata,
+        [QUESTIONS_TRACK_COLUMN]: v.item.config.trackId,
+        stem_normalized_hash: v.built.stemHash,
+      };
+    });
 
     const { data: inserted, error: qErr } = await supabase.from("questions").insert(questionRows).select("id");
 
@@ -632,11 +896,37 @@ export async function bulkPersistQuestions(
     }
     if (optionsOk) {
       contentIds.push(...insertedIds);
-      const status = resolveStatus(ch[0].item.config);
+      for (let i = 0; i < ch.length; i++) {
+        const qId = insertedIds[i];
+        const v = ch[i];
+        if (qId && v.built.fingerprint) {
+          const cfg = v.item.config;
+          supabase
+            .from("question_similarity_index")
+            .upsert(
+              {
+                question_id: qId,
+                exam_track_id: cfg.trackId,
+                topic_id: cfg.topicId ?? null,
+                system_id: cfg.systemId ?? null,
+                normalized_stem_hash: v.built.fingerprint.normalized_stem_hash,
+                normalized_content_hash: v.built.fingerprint.normalized_content_hash,
+                scenario_archetype_key: v.built.fingerprint.scenario_archetype_key || null,
+              },
+              { onConflict: "question_id" }
+            )
+            .then(() => {})
+            .catch(() => {});
+        }
+      }
       for (let i = 0; i < ch.length; i++) {
         const qId = insertedIds[i];
         if (!qId) continue;
         const v = ch[i];
+        const globalIdx = startIdx + i;
+        const status = duplicateInBatchIndices.has(globalIdx)
+          ? "needs_revision"
+          : resolveStatus(v.item.config);
         const prep = prepareQuestionDedupe((v.built.questionRow.stem as string) ?? "");
         await registerAfterSave({
           contentType: "question",
@@ -669,7 +959,11 @@ export async function bulkPersistQuestions(
             archetype as Parameters<typeof appendToGenerationMemory>[1]
           ).catch(() => {});
         }
-        applyQualityAndAutoPublish("question", qId, v.item.draft, status, v.item.config).catch((err) => {
+        applyQualityAndAutoPublish("question", qId, v.item.draft, status, v.item.config, {
+          batchJobId: batchJobId ?? null,
+          campaignId: opts.campaignId ?? null,
+          duplicateRiskResult: (v as { duplicateRisk?: DuplicateRiskResult }).duplicateRisk ?? null,
+        }).catch((err) => {
           if (process.env.NODE_ENV !== "production") {
             console.warn("[bulk-persistence] applyQualityAndAutoPublish failed:", err instanceof Error ? err.message : err);
           }
