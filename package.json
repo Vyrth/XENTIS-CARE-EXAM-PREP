@@ -18,6 +18,7 @@
     "db:local:migrate": "supabase db reset",
     "db:remote:push": "supabase db push",
     "db:status": "supabase status",
+    "check:db": "bash scripts/check-supabase-migrations.sh",
     "db:reset": "supabase db reset",
     "db:seed": "supabase db reset",
     "seed:user": "tsx scripts/seed-user-data.ts",

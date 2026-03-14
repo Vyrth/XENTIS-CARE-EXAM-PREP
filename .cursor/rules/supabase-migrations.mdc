@@ -1,0 +1,32 @@
+---
+description: Supabase migration workflow — explain, create, check, diff, no push until safe
+globs: supabase/migrations/**/*.sql
+alwaysApply: false
+---
+
+# Supabase migration workflow
+
+Before **creating**, **editing**, or **applying** any Supabase migration, follow this order:
+
+1. **Explain the intended schema change**  
+   Describe what you are adding, changing, or removing (tables, columns, indexes, RLS, functions) and why.
+
+2. **Create or update the migration**  
+   Add or edit the migration file under `supabase/migrations/`. Use idempotent patterns (`IF NOT EXISTS`, `DROP POLICY IF EXISTS` + `CREATE POLICY`, etc.). Do not rename or remove already-applied migration files.
+
+3. **Run the migration safety check**  
+   Run:
+   ```bash
+   npm run check:db
+   ```
+   Resolve any failures (Supabase CLI missing, migrations dir invalid, non-SQL files, local stack not running, `supabase migration list` or `supabase db diff` errors) before proceeding.
+
+4. **Show the migration diff**  
+   After the check passes, show the relevant migration diff (e.g. `supabase db diff` output or the edited migration file diff) so the change is visible.
+
+5. **Do not push until the migration safety check passes**  
+   Do not run `supabase db push` or `git push` (which runs the pre-push hook with `check:db`) until `npm run check:db` succeeds.
+
+## Summary
+
+- Explain → Create/update migration → `npm run check:db` → Show diff → No push until check passes.
